@@ -46,7 +46,7 @@ Start immer: `python3 -m http.server 8000` → `http://localhost:8000`.
 **Ziel:** Hallis per Vertrauen und Rhythmus-Minispiel gewinnen.
 - Unruhe-/Vertrauens-Leisten im Kampf-UI für wilde Hallis.
 - `data/temperaments.js`: Wirkung von Futter/ruhige Essenz/Abwarten/Zurückziehen je Wesenszug.
-- `creatures/Pact.js` + `ui/EchoMinigame.js`: Tonfolge vorspielen (Pfeil-Icons + Töne), Nachspielen im Takt, Timing-Fenster, Erfolg/Fehlschlag.
+- `creatures/Pact.js` + `ui/EchoMinigame.js`: Tonfolge vorspielen (Pfeil-Icons + Töne), Nachspielen per **Wischgeste** im Takt, Timing-Fenster, Erfolg/Fehlschlag.
 - Ausdauer 0 → Flucht; Unruhe 100 → Flucht.
 - `creatures/Bond.js` + `creatures/Transform.js`: Bindung und Wandlungsbedingungen (Bindung + Biom + Tageszeit + Wetter).
 
@@ -100,6 +100,7 @@ Herausforderin auf Sturmkamm (Arbeitstitel): **Ilva Windhallerin** – setzt auf
 ---
 
 ## Entscheidungen
+- **Reines Handyspiel:** Steuerung nur per Tippen/Halten im Bild, keine Bildschirmknöpfe; Auflösung passt sich Hoch-/Querformat an.
 - Jedes Halli hat **genau eine Essenz**. Eine Wandlung darf die Essenz wechseln (Pipwiek → Sturmpip).
 - Plan bestätigt, Phase 1 gestartet.
 

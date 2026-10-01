@@ -1,6 +1,6 @@
 # CLAUDE.md – Die Driftlande
 
-Ein 2D-Kreaturen-Sammelspiel im Pixel-Art-Stil. HTML5 Canvas + Vanilla JavaScript (ES-Module), ohne Build-Tools, ohne externe Assets.
+Ein 2D-Kreaturen-Sammelspiel im Pixel-Art-Stil – **ein reines Handyspiel** (Touch, Hoch- und Querformat). HTML5 Canvas + Vanilla JavaScript (ES-Module), ohne Build-Tools, ohne externe Assets.
 
 > **Originalitäts-Regel (verbindlich):** Das Spiel ist vom Genre inspiriert, kopiert aber **keine** Namen, Kreaturen, Designs, Typen, Items, Orte oder Mechaniken aus Pokémon oder anderen bestehenden Spielen. Keine Bälle/Kapseln zum Fangen, keine Typ-Effektivitätstabelle, keine Arenen/Orden, keine Level-basierte Entwicklung als Hauptmechanik. Bei jedem neuen Namen oder Design kurz prüfen: „Klingt das nach etwas Bekanntem?" – im Zweifel umbenennen.
 
@@ -77,8 +77,10 @@ Ein 2D-Kreaturen-Sammelspiel im Pixel-Art-Stil. HTML5 Canvas + Vanilla JavaScrip
 ## 4. Technik & Architektur
 
 ### Rahmen
-- Interne Auflösung **320×180**, ganzzahlig hochskaliert, CSS `image-rendering: pixelated`, `ctx.imageSmoothingEnabled = false`.
-- Tiles **16×16**. Overworld-Sprites 16×16, Kampf-Sprites 32×32.
+- **Dynamische interne Auflösung:** Die kürzere Bildschirmseite hat immer **180 Spielpixel**, die längere passt sich dem Gerät an (Hochformat z. B. 195×422, Querformat 422×195). Kein Letterboxing. Skaliert wird möglichst in ganzen Gerätepixeln, CSS `image-rendering: pixelated`, `ctx.imageSmoothingEnabled = false`.
+- Szenen/UI dürfen deshalb **keine feste Breite/Höhe annehmen** – immer `r.width`/`r.height` verwenden und in beiden Ausrichtungen prüfen.
+- Tiles **16×16**. Overworld-Sprites 16×16, Kampf-Sprites 32×32. Bäume sind zweistöckig (`top` wird über Figuren gezeichnet).
+- Zeichenreihenfolge Overworld: Himmel/Wolken → Boden → Übergänge (`world/tileDecor.js`) → Figuren → Überlagerung (Baumkronen) → Partikel → HUD.
 - **Fester Zeitschritt**: `update(dt)` mit 1/60 s, `render()` einmal pro Frame (requestAnimationFrame, Akkumulator).
 - **Starten:** ES-Module funktionieren nicht über `file://`. Lokal mit einem statischen Server starten:
   `python3 -m http.server 8000` im Projektordner → `http://localhost:8000`. (Kein Build, keine Abhängigkeiten.)
@@ -92,7 +94,7 @@ src/
   engine/               Generisch, spielunabhängig
     Game.js             Game Loop, Szenen-Stack, globale Systeme
     Renderer.js         Canvas, Skalierung, Zeichen-Helfer, Text (Pixel-Font)
-    Input.js            Tastatur + Touch → abstrakte Aktionen (up/down/left/right/confirm/cancel)
+    Input.js            Touch (Tippen/Halten) → Eingaben; Tastatur nur als Entwicklerhilfe
     Camera.js           Folgt Ziel, klemmt an Kartenrand
     Tilemap.js          Ebenen, Kollision, Rendering sichtbarer Tiles
     SpriteSheet.js      Pixel-Arrays → gecachte Offscreen-Canvases
@@ -129,12 +131,15 @@ src/
 
 ---
 
-### Handy & Touch
-- Das Spiel ist **für Handys ausgelegt** (Hoch- und Querformat), Tastatur bleibt am PC nutzbar.
-- `ui/TouchControls.js`: Steuerkreuz (Daumen kann gleiten) + Taste **A** (= Enter/Aktion) und **B** (= Esc/Menü/Zurück). Beide lösen dieselben abstrakten Aktionen aus wie die Tastatur – Spiellogik fragt nie direkt nach Touch.
-- Hochformat: Spielbild oben, Steuerung darunter. Querformat: Steuerung halbtransparent über dem Bild.
-- Eingeblendet bei Touch-Geräten (`pointer: coarse`), bei der ersten Berührung oder mit `?touch`.
-- UI im Spiel muss mit nur **Richtung + A + B** bedienbar sein (keine weiteren Tasten voraussetzen). Debug-Tasten (F1–F4) sind reine PC-Hilfen.
+### Handy & Touch (verbindlich)
+- **Keine Bildschirm-Knöpfe, kein Steuerkreuz.** Bedient wird direkt im Spielbild:
+  - **Tippen** auf ein Feld → Figur läuft per Wegfindung (`world/pathfinding.js`) hin.
+  - **Tippen auf ein Objekt** (Baum, Stein, später NPC/Halli) → hingehen, hindrehen, interagieren.
+  - **Finger halten/ziehen** → Figur läuft in Richtung des Fingers.
+  - **Menü-Symbol** oben rechts (im Canvas gezeichnet, `ui/hud.js`).
+- Menüs, Kampf und Dialoge werden **per Tippen auf Einträge** bedient (große Trefferflächen, ≥ 16 Spielpixel). Das Rhythmus-Minispiel nutzt **Wischgesten** in vier Richtungen.
+- HUD-Elemente mit Abstand zum Rand; die Spielfläche liegt innerhalb der Safe-Area (Notch/Home-Leiste).
+- Tastatur (Pfeile/WASD, Enter, Esc, F1–F4) bleibt nur als Entwicklerhilfe am PC.
 
 ## 5. Coding-Konventionen
 - **Sprache:** Bezeichner (Variablen, Funktionen, Klassen, Dateinamen) auf **Englisch**; **Spieltexte und Daten-Schlüssel der Spielwelt** (Essenzen, Stimmungen, Wesenszüge, Namen) auf **Deutsch**, ohne Umlaute in Schlüsseln (`stroemung`, `aengstlich`). Kommentare auf Deutsch, knapp.
@@ -148,7 +153,8 @@ src/
 
 ## 6. Testen
 - Server starten: `python3 -m http.server 8000`, Browser auf `http://localhost:8000`.
-- Debug-Tasten (nur bei `?debug` in der URL): F1 Kollisionen/Grid, F2 Tageszeit vorspulen, F3 Wetter wechseln, F4 sofortige Begegnung.
+- Am PC mit den Entwicklertools des Browsers im Handy-Modus testen (Gerätesymbol, z. B. iPhone, Hoch- und Querformat).
+- Debug-Tasten (nur bei `?debug` in der URL, PC): F1 Kollisionen/Grid, F2 Tageszeit vorspulen, F3 Wetter wechseln, F4 sofortige Begegnung.
 - Reine Logikmodule (Zeitleiste, Resonanz, Pakt) können mit `node --test` geprüft werden (Node ≥ 18, keine Abhängigkeiten) – Tests liegen in `/tests`.
 
 ## 7. Entwicklungsplan

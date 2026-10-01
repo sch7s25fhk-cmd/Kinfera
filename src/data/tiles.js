@@ -82,24 +82,6 @@ const PATH = [
   'bbbbbbbbbbbbbbbb',
 ];
 
-const TREE = [
-  '.....000000.....',
-  '...0066776600...',
-  '..067777777660..',
-  '.06777677776660.',
-  '.06776667766560.',
-  '0677766666665560',
-  '0667766676655560',
-  '0666666666655550',
-  '0566666665555550',
-  '.05566655555550.',
-  '..055555555550..',
-  '...0005995000...',
-  '......0990......',
-  '......09a0......',
-  '.....09aa90.....',
-  '....55555555....',
-];
 
 const ROCK = [
   '................',
@@ -217,16 +199,166 @@ const BRIDGE_H = [
   '................',
 ];
 
+const GRASS_B = [
+  '6666666666666666',
+  '6666666666666666',
+  '6666666666676666',
+  '6676666666766666',
+  '6766666666666666',
+  '6666666566666666',
+  '6666665666666666',
+  '6666666666666666',
+  '6666666666666676',
+  '6666666666666766',
+  '6656666666666666',
+  '6566666666666666',
+  '6666666667666666',
+  '6666666676666666',
+  '6666666666665666',
+  '6666666666656666',
+];
+
+const GRASS_C = [
+  '6666666666666666',
+  '6666666666666666',
+  '6666667766666666',
+  '6666677876666666',
+  '6666667766666666',
+  '6666666666666566',
+  '6666666666665666',
+  '6766666666666666',
+  '7666666666666666',
+  '6666666666666666',
+  '6666666666766666',
+  '6666666667666666',
+  '6666566666666666',
+  '6665666666666666',
+  '6666666666666666',
+  '6666666666666666',
+];
+
+// Hohes Gras, wiegt sich im Wind (2 Frames)
+const TALL_GRASS_A = [
+  '6666666666666666',
+  '6676666666666766',
+  '6676667666676766',
+  '6576657666576756',
+  '5576557665576755',
+  '5566555665566555',
+  '6555665556555666',
+  '6666666666666666',
+  '6676666676666666',
+  '6676667676667666',
+  '6576657657657666',
+  '5576557557557656',
+  '5566555556555556',
+  '6555666655566555',
+  '6666666666666666',
+  '6666666666666666',
+];
+
+const TALL_GRASS_B = [
+  '6666666666666666',
+  '6667666666666676',
+  '6667666766667676',
+  '6576657666576756',
+  '5576557665576755',
+  '5566555665566555',
+  '6555665556555666',
+  '6666666666666666',
+  '6667666667666666',
+  '6667666767666766',
+  '6576657657657666',
+  '5576557557557656',
+  '5566555556555556',
+  '6555666655566555',
+  '6666666666666666',
+  '6666666666666666',
+];
+
+// Baum über zwei Felder: Krone (Feld darüber, über Figuren) + Stamm (eigenes Feld, blockiert)
+const TREE_TOP = [
+  '................',
+  '................',
+  '......0000......',
+  '....00778700....',
+  '...0778877770...',
+  '..077887777760..',
+  '.07777777776660.',
+  '.07787777766660.',
+  '0777777776666660',
+  '0677777766666650',
+  '0667776666665560',
+  '0666666666655550',
+  '0666666666555550',
+  '0566666665555550',
+  '0666665555555550',
+  '0566655555555550',
+];
+
+const TREE_BASE = [
+  '0556555555555550',
+  '0555555555555550',
+  '.05555555555550.',
+  '..055555555550..',
+  '...0055995500...',
+  '.....009900.....',
+  '......09a0......',
+  '......09a0......',
+  '......09a0......',
+  '......09a0......',
+  '.....099a90.....',
+  '....0999aa90....',
+  '...0000000000...',
+  '...5555555555...',
+  '................',
+  '................',
+];
+
+// Übergänge: Gras franst in den Weg hinein (Kante oben; andere Seiten werden gedreht)
+export const PATH_FRINGE_TOP = [
+  '6666666666666666',
+  '6676666.66676666',
+  'a66aa6aa.6aa66aa',
+  '.aa..a...a..aa..',
+];
+
+// Ufer: Schatten der Böschung im Wasser (Kante oben)
+export const SHORE_TOP = [
+  '5555555555555555',
+  'cccccccccccccccc',
+  'cdcdcccdcdcdcccd',
+];
+
+// Ufer unten: heller Schaum am Rand
+export const SHORE_BOTTOM = [
+  'eeddeeeeedeeeede',
+  '4ee4eee44ee4e4e4',
+];
+
+/** Dreht eine Kanten-Grafik (für "oben" gezeichnet) auf die anderen Seiten */
+export function edgeVariants(top) {
+  const left = transpose(top);
+  return {
+    top,
+    bottom: [...top].reverse(),
+    left,
+    right: left.map((row) => row.split('').reverse().join('')),
+  };
+}
+
 export const TILE_SIZE = 16;
 
 /** @type {Record<string, import('../engine/Tilemap.js').TileDef>} */
 export const TILESET = {
   void: { solid: true },
-  grass: { frames: [GRASS] },
+  // Mehrfach gelistete Varianten = häufiger
+  grass: { frames: [GRASS, GRASS, GRASS, GRASS_B, GRASS_B, GRASS_C], variants: true },
   flowers: { frames: [FLOWERS] },
+  tallGrass: { frames: [TALL_GRASS_A, TALL_GRASS_B], frameTime: 0.8 },
   moss: { frames: [MOSS] },
   path: { frames: [PATH] },
-  tree: { frames: [TREE], under: 'grass', solid: true },
+  tree: { frames: [TREE_BASE], top: TREE_TOP, under: 'grass', solid: true },
   rock: { frames: [ROCK], under: 'grass', solid: true },
   water: { frames: [WATER_A, WATER_B], frameTime: 0.6, solid: true },
   cliff: { frames: [CLIFF], solid: true },
@@ -236,4 +368,7 @@ export const TILESET = {
 };
 
 // Tiles, auf denen die Insel "steht" (darunter entsteht automatisch eine Felswand)
-export const GROUND_TILES = new Set(['grass', 'flowers', 'moss', 'path', 'tree', 'rock', 'water']);
+export const GROUND_TILES = new Set(['grass', 'flowers', 'tallGrass', 'moss', 'path', 'tree', 'rock', 'water']);
+
+// Bewachsener Boden: franst an Wegen aus
+export const GREEN_TILES = new Set(['grass', 'flowers', 'tallGrass', 'moss', 'tree', 'rock']);

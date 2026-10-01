@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PALETTE } from '../src/data/palette.js';
-import { TILESET, TILE_SIZE } from '../src/data/tiles.js';
+import { TILESET, TILE_SIZE, PATH_FRINGE_TOP, SHORE_TOP, SHORE_BOTTOM, edgeVariants } from '../src/data/tiles.js';
 import { PLAYER_FRAMES } from '../src/data/sprites/player.js';
 import { FONT, GLYPH_WIDTH, GLYPH_HEIGHT, GLYPH_MAX_HEIGHT } from '../src/data/font.js';
 import { MOOSHAIN } from '../src/data/maps/mooshain.js';
@@ -24,6 +24,7 @@ test('Palette hat höchstens 16 Farben', () => {
 test('alle Tiles sind 16×16 und nutzen nur Palettenfarben', () => {
   for (const [id, def] of Object.entries(TILESET)) {
     (def.frames ?? []).forEach((f, i) => assertSprite(f, TILE_SIZE, `${id}[${i}]`));
+    if (def.top) assertSprite(def.top, TILE_SIZE, `${id}.top`);
     if (def.under) assert.ok(TILESET[def.under], `${id}.under existiert nicht`);
   }
 });
@@ -72,4 +73,17 @@ test('Mooshain: Startpunkt begehbar, beide Inseln erreichbar', () => {
 test('Felswände werden unter Inselkanten erzeugt', () => {
   const map = parseMap({ rows: ['..', '  ', '  '], legend: { '.': 'grass', ' ': 'void' } });
   assert.deepEqual(map.tiles, ['grass', 'grass', 'cliff', 'cliff', 'cliffBottom', 'cliffBottom']);
+});
+
+test('Kanten-Grafiken sind 16 breit und lassen sich drehen', () => {
+  for (const [name, rows] of Object.entries({ PATH_FRINGE_TOP, SHORE_TOP, SHORE_BOTTOM })) {
+    rows.forEach((row, y) => {
+      assert.equal(row.length, TILE_SIZE, `${name}, Zeile ${y}`);
+      for (const ch of row) assert.ok(ch === '.' || ch in PALETTE, `${name}: '${ch}'`);
+    });
+  }
+  const v = edgeVariants(PATH_FRINGE_TOP);
+  assert.equal(v.left.length, TILE_SIZE);
+  assert.equal(v.left[0].length, PATH_FRINGE_TOP.length);
+  assert.equal(v.right[0], v.left[0].split('').reverse().join(''));
 });

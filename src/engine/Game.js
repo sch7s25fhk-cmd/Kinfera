@@ -8,11 +8,12 @@ const MAX_FRAME = 0.25; // verhindert "Todesspirale" nach Tab-Wechsel
 
 export class Game {
   /**
-   * @param {{ canvas: HTMLCanvasElement, width: number, height: number }} opts
+   * @param {{ canvas: HTMLCanvasElement, shortSide: number }} opts
    */
-  constructor({ canvas, width, height }) {
-    this.renderer = new Renderer(canvas, width, height);
+  constructor({ canvas, shortSide }) {
+    this.renderer = new Renderer(canvas, shortSide);
     this.input = new Input(window);
+    this.input.attachPointer(canvas, (cx, cy) => this.renderer.toGame(cx, cy));
     /** @type {import('./Scene.js').Scene[]} */
     this.scenes = [];
     this.time = 0; // Spielzeit in Sekunden

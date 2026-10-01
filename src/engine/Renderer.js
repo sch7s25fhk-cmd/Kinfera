@@ -7,46 +7,59 @@ const GLYPH_TOP = GLYPH_MAX_HEIGHT - GLYPH_HEIGHT;
 
 export class Renderer {
   /**
+   * Die interne Auflösung passt sich dem Bildschirm an: Die kürzere Seite hat immer
+   * `shortSide` Spielpixel, die längere füllt den Bildschirm (Hoch- wie Querformat, kein Rand).
    * @param {HTMLCanvasElement} canvas
-   * @param {number} width  interne Auflösung
-   * @param {number} height
+   * @param {number} shortSide
    */
-  constructor(canvas, width, height) {
+  constructor(canvas, shortSide) {
     this.canvas = canvas;
-    this.width = width;
-    this.height = height;
-    canvas.width = width;
-    canvas.height = height;
+    this.shortSide = shortSide;
     this.ctx = canvas.getContext('2d');
-    this.ctx.imageSmoothingEnabled = false;
+    this.width = 0;
+    this.height = 0;
     this.scale = 1;
     // Cache: Farbe → Canvas mit allen Glyphen in dieser Farbe
     this.fontCache = new Map();
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
-    // Der Bildbereich ändert sich auch, wenn die Touch-Steuerung ein-/ausgeblendet wird
+    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 100));
     if (canvas.parentElement && 'ResizeObserver' in window) {
       new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
     }
   }
 
-  /**
-   * Skaliert auf den verfügbaren Platz des Elternelements. Bevorzugt wird ein Maßstab in ganzen
-   * Gerätepixeln (alle Spielpixel gleich groß). Würde das zu viel Fläche verschenken
-   * (z. B. Handy im Hochformat), wird stattdessen die volle Breite genutzt.
-   */
   resize() {
     const box = this.canvas.parentElement ?? document.body;
     const availW = box.clientWidth || window.innerWidth;
     const availH = box.clientHeight || window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
-    const raw = Math.min(availW / this.width, availH / this.height);
+    const raw = Math.min(availW, availH) / this.shortSide;
+    // Möglichst ganze Gerätepixel pro Spielpixel (gleich große Pixel)
     const snapped = Math.max(1, Math.floor(raw * dpr)) / dpr;
     const s = snapped / raw >= 0.85 ? snapped : raw;
+    const w = Math.ceil(availW / s);
+    const h = Math.ceil(availH / s);
     this.scale = s;
-    this.canvas.style.width = `${this.width * s}px`;
-    this.canvas.style.height = `${this.height * s}px`;
+    if (w !== this.width || h !== this.height) {
+      this.width = w;
+      this.height = h;
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.ctx.imageSmoothingEnabled = false;
+    }
+    this.canvas.style.width = `${w * s}px`;
+    this.canvas.style.height = `${h * s}px`;
+  }
+
+  /** Bildschirmkoordinaten (z. B. Touch) → Spielpixel */
+  toGame(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * this.width,
+      y: ((clientY - rect.top) / rect.height) * this.height,
+    };
   }
 
   clear(color) {
@@ -113,6 +126,26 @@ export class Renderer {
     });
     this.fontCache.set(color, atlas);
     return atlas;
+  }
+
+  /** Bricht Text an Wortgrenzen so um, dass jede Zeile höchstens maxWidth Pixel breit ist */
+  wrapText(str, maxWidth) {
+    const maxChars = Math.max(1, Math.floor((maxWidth + 1) / GLYPH_ADVANCE));
+    const lines = [];
+    for (const para of String(str).split('\n')) {
+      let line = '';
+      for (const word of para.split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (next.length > maxChars && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      lines.push(line);
+    }
+    return lines;
   }
 
   /** Breite eines Textes in Pixeln (einzeilig) */

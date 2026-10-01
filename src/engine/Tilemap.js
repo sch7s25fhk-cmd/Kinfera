@@ -6,6 +6,8 @@ import { getSprite } from './SpriteSheet.js';
  * @typedef {Object} TileDef
  * @property {string[][]} [frames]  Pixel-Arrays; leer/fehlend = nichts zeichnen
  * @property {number} [frameTime]   Sekunden pro Animationsframe
+ * @property {boolean} [variants]   frames sind Varianten (pro Position fest gewählt) statt Animation
+ * @property {string[]} [top]       Grafik für das Feld darüber, wird ÜBER Figuren gezeichnet (Baumkronen)
  * @property {string} [under]       Tile-ID, die darunter gezeichnet wird (z. B. Gras unter Baum)
  * @property {boolean} [solid]
  */
@@ -47,33 +49,60 @@ export class Tilemap {
     return !!this.tileset[id]?.solid;
   }
 
+  /** Sichtbarer Tile-Ausschnitt (mit Rand für überstehende Grafiken) */
+  visibleRange(cam, margin = 0) {
+    const ts = this.tileSize;
+    return {
+      x0: Math.max(0, Math.floor(cam.x / ts) - margin),
+      y0: Math.max(0, Math.floor(cam.y / ts) - margin),
+      x1: Math.min(this.width - 1, Math.floor((cam.x + cam.viewWidth) / ts) + margin),
+      y1: Math.min(this.height - 1, Math.floor((cam.y + cam.viewHeight) / ts) + margin),
+    };
+  }
+
   /**
+   * Bodenebene zeichnen.
    * @param {import('./Renderer.js').Renderer} r
    * @param {import('./Camera.js').Camera} cam
    * @param {number} time Sekunden seit Spielstart (für Animationen)
    */
   render(r, cam, time) {
     const ts = this.tileSize;
-    const x0 = Math.max(0, Math.floor(cam.x / ts));
-    const y0 = Math.max(0, Math.floor(cam.y / ts));
-    const x1 = Math.min(this.width - 1, Math.floor((cam.x + cam.viewWidth) / ts));
-    const y1 = Math.min(this.height - 1, Math.floor((cam.y + cam.viewHeight) / ts));
-
+    const { x0, y0, x1, y1 } = this.visibleRange(cam);
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
-        const sx = tx * ts - cam.x;
-        const sy = ty * ts - cam.y;
-        this.drawTile(r, this.get(tx, ty), sx, sy, time);
+        this.drawTile(r, this.get(tx, ty), tx, ty, tx * ts - cam.x, ty * ts - cam.y, time);
       }
     }
   }
 
-  drawTile(r, id, sx, sy, time) {
+  /** Überlagernde Ebene (z. B. Baumkronen) – nach den Figuren zeichnen */
+  renderOverlay(r, cam) {
+    const ts = this.tileSize;
+    const { x0, y0, x1, y1 } = this.visibleRange(cam, 1);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const top = this.tileset[this.get(tx, ty)]?.top;
+        if (top) r.drawImage(getSprite(top, this.palette), tx * ts - cam.x, (ty - 1) * ts - cam.y);
+      }
+    }
+  }
+
+  drawTile(r, id, tx, ty, sx, sy, time) {
     const def = this.tileset[id];
     if (!def) return;
-    if (def.under) this.drawTile(r, def.under, sx, sy, time);
+    if (def.under) this.drawTile(r, def.under, tx, ty, sx, sy, time);
     if (!def.frames || !def.frames.length) return;
-    const idx = def.frameTime ? Math.floor(time / def.frameTime) % def.frames.length : 0;
+    let idx = 0;
+    if (def.variants) idx = tileHash(tx, ty) % def.frames.length;
+    else if (def.frameTime) idx = Math.floor(time / def.frameTime) % def.frames.length;
     r.drawImage(getSprite(def.frames[idx], this.palette), sx, sy);
   }
+}
+
+/** Stabiler Pseudo-Zufall pro Feld (für Varianten) */
+export function tileHash(tx, ty) {
+  let h = (Math.imul(tx, 73856093) ^ Math.imul(ty, 19349663)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
 }

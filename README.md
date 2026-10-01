@@ -13,12 +13,15 @@ python3 -m http.server 8000
 Dann `http://localhost:8000` öffnen. Debug-Modus: `http://localhost:8000/?debug`
 
 ## Steuerung
-| Taste            | Aktion                 |
-|------------------|------------------------|
-| Pfeiltasten/WASD | Laufen                 |
-| Enter / Leertaste| Aktion / Untersuchen   |
-| Esc              | Menü (Pause)           |
-| F1 (Debug)       | Raster & Kollision     |
+| Handy (Touch)  | PC (Tastatur)      | Aktion                 |
+|----------------|--------------------|------------------------|
+| Steuerkreuz    | Pfeiltasten / WASD | Laufen                 |
+| A              | Enter / Leertaste  | Aktion / Untersuchen   |
+| B              | Esc                | Menü / Zurück          |
+| –              | F1 (nur `?debug`)  | Raster & Kollision     |
+
+Auf dem Handy: Rechner und Handy im selben WLAN, Server starten und am Handy `http://<IP-des-Rechners>:8000` öffnen.
+Touch-Steuerung am PC erzwingen: `?touch`.
 
 ## Tests
 Reine Logik-/Datentests ohne Abhängigkeiten (Node ≥ 18): `node --test`

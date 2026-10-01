@@ -25,10 +25,25 @@ export class Renderer {
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // Der Bildbereich ändert sich auch, wenn die Touch-Steuerung ein-/ausgeblendet wird
+    if (canvas.parentElement && 'ResizeObserver' in window) {
+      new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
+    }
   }
 
+  /**
+   * Skaliert auf den verfügbaren Platz des Elternelements. Bevorzugt wird ein Maßstab in ganzen
+   * Gerätepixeln (alle Spielpixel gleich groß). Würde das zu viel Fläche verschenken
+   * (z. B. Handy im Hochformat), wird stattdessen die volle Breite genutzt.
+   */
   resize() {
-    const s = Math.max(1, Math.floor(Math.min(window.innerWidth / this.width, window.innerHeight / this.height)));
+    const box = this.canvas.parentElement ?? document.body;
+    const availW = box.clientWidth || window.innerWidth;
+    const availH = box.clientHeight || window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const raw = Math.min(availW / this.width, availH / this.height);
+    const snapped = Math.max(1, Math.floor(raw * dpr)) / dpr;
+    const s = snapped / raw >= 0.85 ? snapped : raw;
     this.scale = s;
     this.canvas.style.width = `${this.width * s}px`;
     this.canvas.style.height = `${this.height * s}px`;

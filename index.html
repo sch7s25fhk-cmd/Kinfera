@@ -2,12 +2,18 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#14121c">
   <title>Die Driftlande</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="game" width="320" height="180"></canvas>
+  <main id="screen">
+    <canvas id="game" width="320" height="180"></canvas>
+  </main>
+  <div id="touch"></div>
   <noscript>Die Driftlande benötigt JavaScript.</noscript>
   <script type="module" src="src/main.js"></script>
 </body>

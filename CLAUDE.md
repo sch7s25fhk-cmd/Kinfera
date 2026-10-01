@@ -92,7 +92,7 @@ src/
   engine/               Generisch, spielunabhängig
     Game.js             Game Loop, Szenen-Stack, globale Systeme
     Renderer.js         Canvas, Skalierung, Zeichen-Helfer, Text (Pixel-Font)
-    Input.js            Tastatur → abstrakte Aktionen (up/down/left/right/confirm/cancel)
+    Input.js            Tastatur + Touch → abstrakte Aktionen (up/down/left/right/confirm/cancel)
     Camera.js           Folgt Ziel, klemmt an Kartenrand
     Tilemap.js          Ebenen, Kollision, Rendering sichtbarer Tiles
     SpriteSheet.js      Pixel-Arrays → gecachte Offscreen-Canvases
@@ -128,6 +128,13 @@ src/
 - Gespeichert: Position/Karte, Team, Halli-Instanzen (Art, Werte, Fähigkeiten, Bindung), Inventar, Flags (Story/NPC), Spielzeit.
 
 ---
+
+### Handy & Touch
+- Das Spiel ist **für Handys ausgelegt** (Hoch- und Querformat), Tastatur bleibt am PC nutzbar.
+- `ui/TouchControls.js`: Steuerkreuz (Daumen kann gleiten) + Taste **A** (= Enter/Aktion) und **B** (= Esc/Menü/Zurück). Beide lösen dieselben abstrakten Aktionen aus wie die Tastatur – Spiellogik fragt nie direkt nach Touch.
+- Hochformat: Spielbild oben, Steuerung darunter. Querformat: Steuerung halbtransparent über dem Bild.
+- Eingeblendet bei Touch-Geräten (`pointer: coarse`), bei der ersten Berührung oder mit `?touch`.
+- UI im Spiel muss mit nur **Richtung + A + B** bedienbar sein (keine weiteren Tasten voraussetzen). Debug-Tasten (F1–F4) sind reine PC-Hilfen.
 
 ## 5. Coding-Konventionen
 - **Sprache:** Bezeichner (Variablen, Funktionen, Klassen, Dateinamen) auf **Englisch**; **Spieltexte und Daten-Schlüssel der Spielwelt** (Essenzen, Stimmungen, Wesenszüge, Namen) auf **Deutsch**, ohne Umlaute in Schlüsseln (`stroemung`, `aengstlich`). Kommentare auf Deutsch, knapp.

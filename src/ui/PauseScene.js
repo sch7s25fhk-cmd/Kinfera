@@ -24,6 +24,6 @@ export class PauseScene extends Scene {
     r.strokeRect(x + 1, y + 1, w - 2, h - 2, COLORS.mist);
     r.text('PAUSE', r.width / 2, y + 8, COLORS.glow, { align: 'center' });
     r.text('Das Menü folgt in Phase 5.', r.width / 2, y + 20, COLORS.white, { align: 'center' });
-    r.text('Esc / Enter: weiter', r.width / 2, y + 31, COLORS.mist, { align: 'center' });
+    r.text('Esc / A / B: weiter', r.width / 2, y + 31, COLORS.mist, { align: 'center' });
   }
 }

@@ -1,4 +1,4 @@
-// Tastatur → abstrakte Aktionen. "pressed" gilt genau einen Update-Schritt.
+// Tastatur und Touch → abstrakte Aktionen. "pressed" gilt genau einen Update-Schritt.
 
 const KEY_MAP = {
   ArrowUp: 'up', KeyW: 'up',
@@ -25,12 +25,7 @@ export class Input {
       if (!action) return;
       e.preventDefault();
       if (e.repeat) return;
-      this.held.add(action);
-      this.pressed.add(action);
-      if (DIRECTIONS.includes(action)) {
-        this.dirStack = this.dirStack.filter((d) => d !== action);
-        this.dirStack.push(action);
-      }
+      this.press(action);
     });
 
     target.addEventListener('keyup', (e) => {
@@ -45,6 +40,16 @@ export class Input {
       this.held.clear();
       this.dirStack = [];
     });
+  }
+
+  /** Auch für virtuelle Tasten (Touch-Steuerung) */
+  press(action) {
+    this.held.add(action);
+    this.pressed.add(action);
+    if (DIRECTIONS.includes(action)) {
+      this.dirStack = this.dirStack.filter((d) => d !== action);
+      this.dirStack.push(action);
+    }
   }
 
   release(action) {

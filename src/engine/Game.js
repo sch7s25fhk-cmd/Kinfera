@@ -16,7 +16,7 @@ export class Game {
     /** @type {import('./Scene.js').Scene[]} */
     this.scenes = [];
     this.time = 0; // Spielzeit in Sekunden
-    this.debug = new URLSearchParams(window.location.search).has('debug');
+    this.debug = new URLSearchParams(window.location.search).has('debug') || window.DRIFTLANDE_DEBUG === true;
     this.fps = 0;
 
     this.accumulator = 0;

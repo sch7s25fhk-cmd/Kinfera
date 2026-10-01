@@ -1,0 +1,18 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #14121c;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}

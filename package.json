@@ -1,0 +1,10 @@
+{
+  "name": "driftlande",
+  "private": true,
+  "type": "module",
+  "description": "Die Driftlande – 2D-Kreaturen-Sammelspiel (kein Build nötig, nur für node --test)",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test"
+  }
+}

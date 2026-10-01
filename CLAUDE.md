@@ -24,7 +24,7 @@ Ein 2D-Kreaturen-Sammelspiel im Pixel-Art-Stil. HTML5 Canvas + Vanilla JavaScrip
 - **Bindung** (0–100) wächst durch gemeinsame Kämpfe, Füttern, Zeit im Team.
 
 ### Die fünf Essenzen
-`klang`, `licht`, `wurzel`, `stroemung`, `stille`. **Keine Stärke-Schwäche-Tabelle.** Stattdessen Resonanz (siehe 3.).
+`klang`, `licht`, `wurzel`, `stroemung`, `stille`. Jedes Halli hat **genau eine Essenz** (eine Wandlung darf sie wechseln). **Keine Stärke-Schwäche-Tabelle.** Stattdessen Resonanz (siehe 3.).
 
 ---
 

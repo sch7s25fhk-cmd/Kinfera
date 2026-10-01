@@ -90,7 +90,7 @@ Start immer: `python3 -m http.server 8000` → `http://localhost:8000`.
 | 8 | Böling       | Strömung   | aggressiv  | S    | Wieselartiger Wirbel aus Wind und Fell. |
 | 9 | Hüllkauz     | Stille     | gelassen   | M    | Eule aus Nebel, deren Flügel jeden Laut schlucken. |
 |10 | Schweigling  | Stille     | scheu      | S    | Schneckchen mit Spiralhaus, in dem Geräusche verschwinden. |
-|11 | Sturmpip     | Klang/Strömung | neugierig | S | Wandlung von Pipwiek: Bindung ≥ 70, Kampf **bei Nacht** auf den **Sturmklippen**. |
+|11 | Sturmpip     | Strömung   | neugierig  | S    | Wandlung von Pipwiek (wechselt die Essenz): Bindung ≥ 70, Kampf **bei Nacht** auf den **Sturmklippen**. |
 |12 | Laternhüter  | Licht      | gelassen   | M    | Wandlung von Funzling: Bindung ≥ 60, Kampf **bei Regen** im **Mooswald**. |
 
 Startpartner-Auswahl: Pipwiek, Moosbock, Zirrflosse.
@@ -99,8 +99,10 @@ Herausforderin auf Sturmkamm (Arbeitstitel): **Ilva Windhallerin** – setzt auf
 
 ---
 
-## Offene Fragen an dich
-1. Sind die 12 Hallis / Namen so in Ordnung, oder willst du eigene Namen/Ideen einbringen?
-2. Sollen Hallis zwei Essenzen haben dürfen (wie Sturmpip), oder streng eine pro Halli?
-3. Tag-Nacht-Dauer: 20 Min. Echtzeit pro Spieltag okay?
-4. Bestätigst du den Plan, damit ich mit **Phase 1** starte?
+## Entscheidungen
+- Jedes Halli hat **genau eine Essenz**. Eine Wandlung darf die Essenz wechseln (Pipwiek → Sturmpip).
+- Plan bestätigt, Phase 1 gestartet.
+
+## Offene Fragen
+1. Passen die 12 Hallis / Namen?
+2. Tag-Nacht-Dauer: 20 Min. Echtzeit pro Spieltag okay?

@@ -1,109 +1,38 @@
-# Entwicklungsplan – Die Driftlande
+# Entwicklungsplan – Funkenflug
 
-Jede Phase endet mit einem lauffähigen Spiel, einer kurzen Testanleitung und einer Pause für Feedback.
-Start immer: `python3 -m http.server 8000` → `http://localhost:8000`.
+Handy-Jump'n'Run im Querformat. Jede Phase endet lauffähig, mit Testanleitung und Feedback-Pause.
 
----
+## Phase 1 – Spielbarer Prototyp ✅
+- Engine: Loop, Querformat-Vollbild, Mehrfinger-Touch, Bildschirmtasten, Partikel
+- Lio: Laufen, Springen (Coyote-Time, Sprungpuffer, variable Höhe), Funken werfen, Laterne als Leben/Munition
+- Gegner: Rostkäfer, Dornschnecke, Nebelqualle; Draufspringen und Abschießen
+- Level 1-1 „Der erste Funke": Wolkenplattformen, Brücke, Dornen, Aufwind, Kontrollpunkte, Funken, verlorenes Licht
+- Grafik: Parallax-Himmel (Sonne, ferne Inseln, Bergkämme, Wolkenbänke, Wolkenmeer), Grasnarbe, Tiefenschatten, Lichtschein der Laterne, Partikel, Kamera-Wackeln
+- Titelbild, Pause (Weiter/Neustart), Ergebnisfenster
 
-## Phase 1 – Engine-Grundlage
-**Ziel:** Eine Figur läuft über eine kleine Testinsel, Kamera folgt.
-- `index.html`, `style.css`: 320×180-Canvas, ganzzahliges Hochskalieren, `pixelated`.
-- `engine/Game.js`: Fixed-Timestep-Loop (60 Hz), Szenen-Stack.
-- `engine/Renderer.js`: Skalierung bei Fenstergröße, Zeichen-Helfer, Bitmap-Schrift.
-- `engine/Input.js`: Pfeile/WASD, Enter, Esc → abstrakte Aktionen, „gerade gedrückt"-Erkennung.
-- `engine/SpriteSheet.js` + `data/palette.js`: Pixel-Arrays → gecachte Canvases.
-- `engine/Tilemap.js`, `engine/Camera.js`: Tile-Ebenen (Boden, Deko, Kollision), Wolkenmeer-Rand.
-- `world/Player.js`: Tile-basiertes, flüssig interpoliertes Laufen (4 Richtungen, 2-Frame-Laufanimation), Kollision.
-- Erste Tiles: Gras, Moos, Weg, Baum, Fels, Wasser, Wolkenkante, Brücke.
-- Debug-Overlay (`?debug`): FPS, Grid, Kollision.
+## Phase 2 – Sound & Spielgefühl
+- Web-Audio-Synth: Sprung, Funke, Treffer, Sammeln, Kontrollpunkt, Musik-Loop pro Welt
+- Feinschliff: Landeverformung, Schritt-Staub, Treffer-Pause (Hit-Stop), Übergänge zwischen Szenen
+- Einstellungen: Ton an/aus, Tastengröße/-position, Linkshänder-Layout
 
-**Test:** Herumlaufen, an Bäume/Kanten stoßen, Kamera klemmt am Kartenrand, Fenster skalieren.
+## Phase 3 – Welt 1 komplett
+- Level 1-2 bis 1-4 mit neuen Elementen: bröckelnde Wolken, Ranken zum Klettern, seitliche Windstöße, Kurbelvogel
+- Geheimnisse: versteckte Funkenwege, ein „verborgener Funke" pro Level
+- Boss 1: Sturmmaschine im Mooswald
 
-## Phase 2 – Overworld mit sichtbaren Hallis
-**Ziel:** Lebendige Insel mit herumlaufenden Hallis, Begegnungen per Berührung.
-- `world/WorldClock.js`: Tag-Nacht-Zyklus (Morgen/Tag/Abend/Nacht) mit Farb-Tint.
-- `world/Weather.js`: Wetter pro Insel (klar/Regen/Nebel/Sturm) mit Partikeln.
-- `world/Spawner.js`: Spawn-Tabellen pro Zone abhängig von Tageszeit/Wetter, max. Anzahl gleichzeitig.
-- `world/WildHalli.js`: Verhalten nach Wesenszug – scheu (flieht), neugierig (nähert sich, bleibt stehen), aggressiv (verfolgt), gelassen (wandert). Sicht-/Fluchtradius.
-- Erste 4 Hallis mit 16×16-Sprites als Platzhalter-Datensatz.
-- Berührung → Übergangseffekt → Platzhalter-Kampfszene → zurück.
-- Zweite Insel + Brücke und eine Windströmung als Kartenwechsel.
+## Phase 4 – Weltkarte & Speichern
+- Weltkarte zum Antippen der Level, freischalten, beste Zeiten, Funken-Sterne
+- Speichern in `localStorage`
 
-**Test:** Mit `?debug` Zeit/Wetter umschalten und beobachten, wie sich Spawns ändern; scheue Hallis fliehen, aggressive verfolgen.
+## Phase 5 – Weitere Welten
+- Kristallhöhlen (dunkel – Laterne als echte Lichtquelle), Sturmklippen, Glutfelder, versunkene Ruinen
+- Je Welt neue Gegner, ein neues Element und ein Boss
 
-## Phase 3 – Kampfsystem „Resonanz-Zeitleiste"
-**Ziel:** Vollständiger 2-gegen-2-Kampf.
-- `battle/BattleState.js` (reine Logik), `battle/Timeline.js`, `battle/Resonance.js`, `battle/Mood.js`, `battle/AI.js`.
-- `data/skills.js`: Fähigkeiten mit Essenz, Zeitkosten, Energiekosten, Wirkung, Stimmungseffekt.
-- `battle/BattleScene.js` + `ui/`: Zeitleiste oben mit Vorschau, Resonanz-Anzeige pro Seite (Stufe 0–3), Stimmungs-Icons, Ausdauer-/Energiebalken, Aktionsmenü (Fähigkeit / Tauschen / Annähern / Rückzug).
-- Assists bei Resonanz-Stufe 3, Partnertausch, Ausweichen aus dem Kampf.
-- Kampf-Sprites 32×32 für die ersten Hallis.
-- Node-Tests für Zeitleiste & Resonanz in `/tests`.
-
-**Test:** Gegen ein wildes Halli kämpfen; beobachten, wie starke Aktionen auf der Leiste nach hinten schieben, Resonanz aufbaut/bricht, Stille alles löscht, Assist bei Stufe 3.
-
-## Phase 4 – Fangsystem „Pakt statt Gefangenschaft"
-**Ziel:** Hallis per Vertrauen und Rhythmus-Minispiel gewinnen.
-- Unruhe-/Vertrauens-Leisten im Kampf-UI für wilde Hallis.
-- `data/temperaments.js`: Wirkung von Futter/ruhige Essenz/Abwarten/Zurückziehen je Wesenszug.
-- `creatures/Pact.js` + `ui/EchoMinigame.js`: Tonfolge vorspielen (Pfeil-Icons + Töne), Nachspielen per **Wischgeste** im Takt, Timing-Fenster, Erfolg/Fehlschlag.
-- Ausdauer 0 → Flucht; Unruhe 100 → Flucht.
-- `creatures/Bond.js` + `creatures/Transform.js`: Bindung und Wandlungsbedingungen (Bindung + Biom + Tageszeit + Wetter).
-
-**Test:** Ein scheues Halli durch Abwarten/Zurückziehen beruhigen, Echo nachsingen, Pakt schließen; Gegenprobe mit Angriffen → Flucht.
-
-## Phase 5 – Team-Menü, Speichern, Dialoge, NPCs
-**Ziel:** Ein zusammenhängendes, speicherbares Spiel.
-- Esc-Menü: Team (Reihenfolge, Aktiv/Partner, Fähigkeiten wählen max. 4), Halli-Details (Werte, Bindung, Wesenszug), Inventar (Futter), Speichern, Optionen.
-- `world/Npc.js`, `ui/DialogBox.js`: Dialoge mit Schreibmaschinen-Effekt, Auswahlantworten, Flags.
-- Startdorf **Windkehr**: Haus des Spielers, Echo-Hüterin (Heilung/Ruheplatz), Futterhändler, 3–4 NPCs mit Hinweisen.
-- Speichern/Laden über `localStorage` (versioniert), Titelbildschirm mit „Fortsetzen / Neues Spiel".
-- Intro: Wahl eines ersten Hallis (eines von drei).
-
-**Test:** Neues Spiel, Startpartner wählen, mit NPCs reden, Team umstellen, speichern, Seite neu laden, fortsetzen.
-
-## Phase 6 – Inhalte, Balancing, Polishing
-**Ziel:** Erster vollständiger Spielabschnitt mit Ziel.
-- Alle 12 Hallis mit 16×16- und 32×32-Sprites, 4–6 Fähigkeiten, Wandlungsbedingungen.
-- Beide Inseln ausgebaut, Gleiter als Ausblick/Freischaltung nach dem Sieg.
-- Erste Herausforderin auf **Sturmkamm** (2-gegen-2, eigene KI-Strategie mit Resonanzketten) + 2 Trainer davor.
-- `engine/Audio.js`: Web-Audio-Synth – Essenz-Klangfarben, Echo-Töne fürs Minispiel, kurze Musik-Loops pro Insel, UI-Sounds.
-- Animationen: Treffer-Wackeln, Resonanz-Aufleuchten, Bildschirmübergänge, Wasser/Wolken-Animation.
-- Balancing-Durchlauf über `data/balance.js`.
-
-**Test:** Komplett von Windkehr bis zum Sieg über die Herausforderin durchspielen.
-
----
-
-## Vorschlag: Die ersten 12 Hallis (Arbeitstitel)
-10 Grundformen + 2 Wandlungen. Biome: **M** = Mooshain (Mooswald), **S** = Sturmkamm (Sturmklippen).
-
-| # | Name         | Essenz     | Wesenszug  | Biom | Beschreibung |
-|---|--------------|------------|------------|------|--------------|
-| 1 | Pipwiek      | Klang      | neugierig  | M/S  | Daunenkugel mit Trichterschnabel, pfeift Echos nach. |
-| 2 | Brummkrug    | Klang      | gelassen   | M    | Krötenartiges Wesen mit tönernem Bauch, der summt. |
-| 3 | Funzling     | Licht      | scheu      | M    | Kleiner Laternenpilz auf Wurzelbeinchen, glüht nachts. |
-| 4 | Prismaus     | Licht      | neugierig  | S    | Flinker Nager mit Kristallschwanz, der Licht bricht; startet Kämpfe oft übermütig. |
-| 5 | Moosbock     | Wurzel     | gelassen   | M    | Gedrungenes Huftierchen mit Moosrücken und Pilzhörnchen. |
-| 6 | Knorrkin     | Wurzel     | aggressiv  | M    | Lebender Wurzelknoten mit Bernsteinaugen. |
-| 7 | Zirrflosse   | Strömung   | neugierig  | S    | Fischwesen, das durch Wolken schwimmt. |
-| 8 | Böling       | Strömung   | aggressiv  | S    | Wieselartiger Wirbel aus Wind und Fell. |
-| 9 | Hüllkauz     | Stille     | gelassen   | M    | Eule aus Nebel, deren Flügel jeden Laut schlucken. |
-|10 | Schweigling  | Stille     | scheu      | S    | Schneckchen mit Spiralhaus, in dem Geräusche verschwinden. |
-|11 | Sturmpip     | Strömung   | neugierig  | S    | Wandlung von Pipwiek (wechselt die Essenz): Bindung ≥ 70, Kampf **bei Nacht** auf den **Sturmklippen**. |
-|12 | Laternhüter  | Licht      | gelassen   | M    | Wandlung von Funzling: Bindung ≥ 60, Kampf **bei Regen** im **Mooswald**. |
-
-Startpartner-Auswahl: Pipwiek, Moosbock, Zirrflosse.
-
-Herausforderin auf Sturmkamm (Arbeitstitel): **Ilva Windhallerin** – setzt auf Strömungs-Resonanzketten und zwingt den Spieler, sie mit Essenzwechseln oder Stille zu brechen.
-
----
+## Phase 6 – Veröffentlichung
+- Als installierbare Web-App (PWA) und optional als App für iOS/Android verpacken
+- Balancing, Leistung auf älteren Handys, Barrierefreiheit (Farbkontraste, größere Tasten)
 
 ## Entscheidungen
-- **Reines Handyspiel:** Steuerung nur per Tippen/Halten im Bild, keine Bildschirmknöpfe; Auflösung passt sich Hoch-/Querformat an.
-- Jedes Halli hat **genau eine Essenz**. Eine Wandlung darf die Essenz wechseln (Pipwiek → Sturmpip).
-- Plan bestätigt, Phase 1 gestartet.
-
-## Offene Fragen
-1. Passen die 12 Hallis / Namen?
-2. Tag-Nacht-Dauer: 20 Min. Echtzeit pro Spieltag okay?
+- Projekt umgebaut von „Die Driftlande" (Kreaturen-Sammeln/Festungsbau) zu **Funkenflug** (Jump'n'Run).
+- Handyspiel im **Querformat** mit Bildschirmtasten (für ein Jump'n'Run nötig).
+- Held **Lio** mit Laterne; Welt bleibt **die Driftlande**.

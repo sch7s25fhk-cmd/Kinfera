@@ -96,6 +96,11 @@ export class Renderer {
     this.ctx.drawImage(img, Math.round(x), Math.round(y));
   }
 
+  /** Bild mit ganzzahligem Vergrößerungsfaktor zeichnen */
+  drawImageScaled(img, x, y, scale) {
+    this.ctx.drawImage(img, Math.round(x), Math.round(y), img.width * scale, img.height * scale);
+  }
+
   withAlpha(alpha, fn) {
     const prev = this.ctx.globalAlpha;
     this.ctx.globalAlpha = alpha;
@@ -158,21 +163,23 @@ export class Renderer {
    * @param {number} x
    * @param {number} y
    * @param {string} color
-   * @param {{ shadow?: string, align?: 'left'|'center'|'right' }} [opts]
+   * @param {{ shadow?: string, align?: 'left'|'center'|'right', scale?: number }} [opts]
    */
   text(str, x, y, color, opts = {}) {
+    const s = opts.scale ?? 1;
     const lines = String(str).toUpperCase().split('\n');
     lines.forEach((line, li) => {
       let lx = x;
-      if (opts.align === 'center') lx = x - Math.floor(this.measureText(line) / 2);
-      else if (opts.align === 'right') lx = x - this.measureText(line);
-      const ly = y + li * LINE_HEIGHT;
-      if (opts.shadow) this.drawLine(line, lx + 1, ly + 1, opts.shadow);
-      this.drawLine(line, lx, ly, color);
+      const w = this.measureText(line) * s;
+      if (opts.align === 'center') lx = x - Math.floor(w / 2);
+      else if (opts.align === 'right') lx = x - w;
+      const ly = y + li * LINE_HEIGHT * s;
+      if (opts.shadow) this.drawLine(line, lx + s, ly + s, opts.shadow, s);
+      this.drawLine(line, lx, ly, color, s);
     });
   }
 
-  drawLine(line, x, y, color) {
+  drawLine(line, x, y, color, s = 1) {
     const atlas = this.glyphAtlas(color);
     x = Math.round(x);
     y = Math.round(y);
@@ -181,7 +188,7 @@ export class Renderer {
       if (ch !== ' ') {
         const idx = atlas.index.get(ch) ?? atlas.index.get('?');
         this.ctx.drawImage(atlas.canvas, idx * GLYPH_WIDTH, 0, GLYPH_WIDTH, GLYPH_MAX_HEIGHT,
-          x + i * GLYPH_ADVANCE, y - GLYPH_TOP, GLYPH_WIDTH, GLYPH_MAX_HEIGHT);
+          x + i * GLYPH_ADVANCE * s, y - GLYPH_TOP * s, GLYPH_WIDTH * s, GLYPH_MAX_HEIGHT * s);
       }
     }
   }

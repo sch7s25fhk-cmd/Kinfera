@@ -1,19 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PALETTE } from '../src/data/palette.js';
-import { TILESET, TILE_SIZE, PATH_FRINGE_TOP, SHORE_TOP, SHORE_BOTTOM, edgeVariants } from '../src/data/tiles.js';
-import { PLAYER_FRAMES } from '../src/data/sprites/player.js';
+import { TILESET, TILE_SIZE } from '../src/data/tiles.js';
+import { HERO } from '../src/data/sprites/hero.js';
+import { ENEMY_SPRITES } from '../src/data/sprites/enemies.js';
+import { SPARK_PICKUP, SPARK_SHOT, CHECKPOINT } from '../src/data/sprites/items.js';
 import { FONT, GLYPH_WIDTH, GLYPH_HEIGHT, GLYPH_MAX_HEIGHT } from '../src/data/font.js';
-import { MOOSHAIN } from '../src/data/maps/mooshain.js';
-import { parseMap } from '../src/world/mapLoader.js';
+import { LEVEL_1_1 } from '../src/data/levels/level1_1.js';
+import { parseLevel } from '../src/level/levelLoader.js';
 
-function assertSprite(rows, size, label) {
-  assert.equal(rows.length, size, `${label}: ${rows.length} Zeilen statt ${size}`);
+function assertSprite(rows, w, h, label) {
+  assert.equal(rows.length, h, `${label}: ${rows.length} Zeilen statt ${h}`);
   rows.forEach((row, y) => {
-    assert.equal(row.length, size, `${label}, Zeile ${y}: Länge ${row.length}`);
-    for (const ch of row) {
-      assert.ok(ch === '.' || ch in PALETTE, `${label}, Zeile ${y}: unbekanntes Zeichen '${ch}'`);
-    }
+    assert.equal(row.length, w, `${label}, Zeile ${y}: Länge ${row.length}`);
+    for (const ch of row) assert.ok(ch === '.' || ch in PALETTE, `${label}, Zeile ${y}: unbekanntes Zeichen '${ch}'`);
   });
 }
 
@@ -21,18 +21,24 @@ test('Palette hat höchstens 16 Farben', () => {
   assert.ok(Object.keys(PALETTE).length <= 16);
 });
 
-test('alle Tiles sind 16×16 und nutzen nur Palettenfarben', () => {
+test('alle Tiles sind 16×16', () => {
   for (const [id, def] of Object.entries(TILESET)) {
-    (def.frames ?? []).forEach((f, i) => assertSprite(f, TILE_SIZE, `${id}[${i}]`));
-    if (def.top) assertSprite(def.top, TILE_SIZE, `${id}.top`);
-    if (def.under) assert.ok(TILESET[def.under], `${id}.under existiert nicht`);
+    (def.frames ?? []).forEach((f, i) => assertSprite(f, TILE_SIZE, TILE_SIZE, `${id}[${i}]`));
   }
 });
 
-test('Spieler-Frames sind 16×16', () => {
-  for (const [dir, set] of Object.entries(PLAYER_FRAMES)) {
-    for (const [name, rows] of Object.entries(set)) assertSprite(rows, 16, `player.${dir}.${name}`);
+test('Lio: alle Frames 16×16', () => {
+  for (const [name, v] of Object.entries(HERO)) {
+    const frames = Array.isArray(v[0]) ? v : [v];
+    frames.forEach((f, i) => assertSprite(f, 16, 16, `hero.${name}[${i}]`));
   }
+});
+
+test('Gegner, Funken und Kontrollpunkt haben gültige Größen', () => {
+  for (const [kind, frames] of Object.entries(ENEMY_SPRITES)) frames.forEach((f, i) => assertSprite(f, 16, 16, `${kind}[${i}]`));
+  SPARK_PICKUP.forEach((f, i) => assertSprite(f, 8, 8, `spark[${i}]`));
+  SPARK_SHOT.forEach((f, i) => assertSprite(f, 6, 6, `shot[${i}]`));
+  for (const [k, f] of Object.entries(CHECKPOINT)) assertSprite(f, 16, 16, `checkpoint.${k}`);
 });
 
 test('Schrift-Glyphen haben 3×5 (Umlaute 3×6)', () => {
@@ -42,48 +48,23 @@ test('Schrift-Glyphen haben 3×5 (Umlaute 3×6)', () => {
   }
 });
 
-test('Mooshain: Startpunkt begehbar, beide Inseln erreichbar', () => {
-  const map = parseMap(MOOSHAIN);
-  const solid = (x, y) => {
-    if (x < 0 || y < 0 || x >= map.width || y >= map.height) return true;
-    return !!TILESET[map.tiles[y * map.width + x]].solid;
-  };
-  const { x, y } = MOOSHAIN.spawn;
-  assert.ok(!solid(x, y), 'Startpunkt ist blockiert');
-
-  // Flood-Fill vom Startpunkt
-  const seen = new Set([`${x},${y}`]);
-  const queue = [[x, y]];
-  while (queue.length) {
-    const [cx, cy] = queue.pop();
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = cx + dx;
-      const ny = cy + dy;
-      const key = `${nx},${ny}`;
-      if (!seen.has(key) && !solid(nx, ny)) {
-        seen.add(key);
-        queue.push([nx, ny]);
-      }
-    }
-  }
-  const walkable = map.tiles.filter((id) => !TILESET[id].solid).length;
-  assert.equal(seen.size, walkable, 'Es gibt unerreichbare begehbare Tiles');
+test('Level 1-1: Start, Ziel, Funken und Gegner vorhanden', () => {
+  const lvl = parseLevel(LEVEL_1_1);
+  const count = (t) => lvl.objects.filter((o) => o.type === t).length;
+  assert.equal(count('player'), 1);
+  assert.equal(count('light'), 1);
+  assert.ok(count('spark') >= 20);
+  assert.ok(count('beetle') + count('snail') + count('jelly') >= 5);
+  // Start steht auf festem Boden
+  const p = lvl.objects.find((o) => o.type === 'player');
+  assert.equal(lvl.tiles[(p.ty + 1) * lvl.width + p.tx], 'groundTop');
 });
 
-test('Felswände werden unter Inselkanten erzeugt', () => {
-  const map = parseMap({ rows: ['..', '  ', '  '], legend: { '.': 'grass', ' ': 'void' } });
-  assert.deepEqual(map.tiles, ['grass', 'grass', 'cliff', 'cliff', 'cliffBottom', 'cliffBottom']);
-});
-
-test('Kanten-Grafiken sind 16 breit und lassen sich drehen', () => {
-  for (const [name, rows] of Object.entries({ PATH_FRINGE_TOP, SHORE_TOP, SHORE_BOTTOM })) {
-    rows.forEach((row, y) => {
-      assert.equal(row.length, TILE_SIZE, `${name}, Zeile ${y}`);
-      for (const ch of row) assert.ok(ch === '.' || ch in PALETTE, `${name}: '${ch}'`);
-    });
-  }
-  const v = edgeVariants(PATH_FRINGE_TOP);
-  assert.equal(v.left.length, TILE_SIZE);
-  assert.equal(v.left[0].length, PATH_FRINGE_TOP.length);
-  assert.equal(v.right[0], v.left[0].split('').reverse().join(''));
+test('Autotiling: Grasnarbe oben, Erde darunter, Wolkenränder', () => {
+  const lvl = parseLevel({ rows: ['P    ', ' === ', '###  ', '###  ', '     '] });
+  const at = (x, y) => lvl.tiles[y * lvl.width + x];
+  assert.equal(at(0, 2), 'groundTop');
+  assert.equal(at(0, 3), 'dirt');
+  assert.equal(at(0, 4), 'underside');
+  assert.deepEqual([at(1, 1), at(2, 1), at(3, 1)], ['cloudL', 'cloudM', 'cloudR']);
 });

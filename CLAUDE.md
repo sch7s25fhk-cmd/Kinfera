@@ -1,161 +1,111 @@
-# CLAUDE.md – Die Driftlande
+# CLAUDE.md – Funkenflug
 
-Ein 2D-Kreaturen-Sammelspiel im Pixel-Art-Stil – **ein reines Handyspiel** (Touch, Hoch- und Querformat). HTML5 Canvas + Vanilla JavaScript (ES-Module), ohne Build-Tools, ohne externe Assets.
+2D-Jump'n'Run im Pixel-Art-Stil – **ein Handyspiel im Querformat**. HTML5 Canvas + Vanilla JavaScript (ES-Module), ohne Build-Tools, ohne externe Assets.
 
-> **Originalitäts-Regel (verbindlich):** Das Spiel ist vom Genre inspiriert, kopiert aber **keine** Namen, Kreaturen, Designs, Typen, Items, Orte oder Mechaniken aus Pokémon oder anderen bestehenden Spielen. Keine Bälle/Kapseln zum Fangen, keine Typ-Effektivitätstabelle, keine Arenen/Orden, keine Level-basierte Entwicklung als Hauptmechanik. Bei jedem neuen Namen oder Design kurz prüfen: „Klingt das nach etwas Bekanntem?" – im Zweifel umbenennen.
+> **Originalitäts-Regel (verbindlich):** Vom Genre (klassische Jump'n'Runs) inspiriert, aber **keine** Figuren, Namen, Designs, Gegner, Items, Orte oder Erkennungsmerkmale aus Mario, Donkey Kong oder anderen bestehenden Spielen. Keine Klempner, Pilze, Röhren, Fragezeichen-Blöcke, Fässer, Affen, Münzen-Blöcke. Bei jedem neuen Element prüfen: „Erinnert das an etwas Bekanntes?" – im Zweifel umgestalten.
 
 ---
 
 ## 1. Spielkonzept
 
-### Welt: „Die Driftlande"
-- Ein Archipel schwebender Inseln über einem Wolkenmeer. Jede Insel = ein Biom:
-  Mooswald, Kristallhöhlen, Sturmklippen, Glutfelder, versunkene Ruinen.
-- Verbindungen: Brücken, Windströmungen (feste Routen, auf die man tritt), später ein freischaltbarer Gleiter.
-- **Tag-Nacht-Zyklus** (Spielzeit, ca. 1 Spieltag = 20 Min. Echtzeit) und **Wetter** (klar, Regen, Nebel, Sturm) pro Insel. Beide beeinflussen, welche Hallis erscheinen.
-- Startumfang: Insel **Mooshain** (Mooswald + Startdorf **Windkehr**) und Insel **Sturmkamm** (Sturmklippen, Sitz der ersten Herausforderin).
+### Welt: Die Driftlande
+Schwebende Inseln über einem Wolkenmeer. Der Sturm **„Graue Sog"** hat die Lichter der Inseln gestohlen und die Bewohner in rostige Maschinenwesen verwandelt. Welten: Mooswald, Kristallhöhlen, Sturmklippen, Glutfelder, versunkene Ruinen – je 3–4 Level + Boss.
 
-### Hallis
-- Wesen aus verdichtetem Echo der Welt. Sie sind **sichtbar in der Overworld** und bewegen sich frei.
-- **Wesenszug** (fest, pro Art mit Varianz): `scheu` (flieht vor dem Spieler), `neugierig` (nähert sich, beobachtet), `aggressiv` (verfolgt den Spieler), `gelassen` (ignoriert den Spieler weitgehend).
-- **Stimmung** (dynamisch im Kampf): `ruhig`, `gereizt`, `ängstlich`, `übermütig`. Verändert sich durch Aktionen und modifiziert Werte (siehe 3.).
-- Werte: `ausdauer` (HP), `kraft`, `schutz`, `tempo`, `fokus`, `energie` (Ressource für Fähigkeiten).
-- Max. 4 aktive Fähigkeiten (aus 4–6 erlernbaren). Fähigkeiten kosten **Energie**, keine festen Anwendungen.
-- **Bindung** (0–100) wächst durch gemeinsame Kämpfe, Füttern, Zeit im Team.
+### Held: Lio, der Laternenträger
+- Kleine Gestalt mit blauer Kapuze, rotem Schal und einer **Laterne auf dem Rücken**.
+- **Die Laterne ist Lebensanzeige und Munition zugleich:** Treffer kosten Licht, jeder geworfene **Funke** kostet etwas Licht, eingesammelte Funken laden auf. Unter einem Mindestwert kann Lio nicht mehr werfen. Laterne leer oder Sturz ins Wolkenmeer → zurück zum letzten Kontrollpunkt.
+- Fähigkeiten: Laufen, Springen (variable Höhe), Funken werfen, auf Gegner springen.
 
-### Die fünf Essenzen
-`klang`, `licht`, `wurzel`, `stroemung`, `stille`. Jedes Halli hat **genau eine Essenz** (eine Wandlung darf sie wechseln). **Keine Stärke-Schwäche-Tabelle.** Stattdessen Resonanz (siehe 3.).
+### Gegner (eigene Designs)
+| Gegner        | Verhalten                                  | Besiegen                         |
+|---------------|--------------------------------------------|----------------------------------|
+| Rostkäfer     | läuft, dreht an Kanten und Wänden um       | draufspringen oder 1 Funke       |
+| Dornschnecke  | langsam, Stachelhaus                       | nur Funken (2), Draufspringen tut weh |
+| Nebelqualle   | schwebt auf und ab                         | draufspringen oder 1 Funke       |
+| Kurbelvogel   | (geplant) stößt von oben herab             |                                  |
 
----
-
-## 2. Kampfsystem: „Resonanz-Zeitleiste"
-
-### Zeitleiste
-- Jeder Kämpfer hat einen Zeitpunkt `t` auf der Leiste. Es handelt immer der Kämpfer mit dem kleinsten `t`.
-- Jede Aktion hat **Zeitkosten** `cost`. Nach der Aktion: `t += cost * (100 / tempo)`.
-  Schnelle/schwache Aktionen (cost ~40) → oft dran. Starke Aktionen (cost ~120) → weit nach hinten.
-- Die Leiste zeigt die nächsten ~8 Züge als Vorschau (Icons). Aktionen können gegnerische `t` verschieben (z. B. „Verzögern").
-- Gleichstand: höheres Tempo zuerst, dann Spielerseite.
-
-### Resonanz (pro Seite)
-- Zustand: `{ essenz, stufe }` mit Stufe 0–3.
-- Gleiche Essenz wie die letzte eigene Aktion → Stufe +1 (max. 3). Bonus: Stufe 1 = +10 %, 2 = +25 %, 3 = +45 % Wirkung.
-- Andere Essenz → eigene Resonanz beginnt neu (Stufe 1 mit neuer Essenz).
-- Trifft man den Gegner mit einer **anderen** Essenz als dessen aktueller Resonanz → gegnerische Stufe −1 („Brechen").
-- **Stille** löscht die Resonanz **beider** Seiten komplett.
-- Bei Stufe 3 kann der **Partner** einen **Assist** auslösen (verbraucht die Resonanz, kostet den aktiven Kämpfer keine Zeit).
-
-### 2-gegen-2
-- Jede Seite: ein **aktives** Halli + ein **Partner**. Nur das aktive steht auf der Zeitleiste; der Partner assistiert.
-- Tausch aktiv ↔ Partner ist eine Aktion mit Zeitkosten.
-- Wilde Begegnungen: meist 1 Halli (mit Partner-Slot leer), Gruppen möglich; Trainer/Meister: immer 2-gegen-2.
-
-### Stimmung
-| Stimmung   | Effekt                                          | typische Auslöser                         |
-|------------|-------------------------------------------------|-------------------------------------------|
-| ruhig      | +Fokus, normale Werte                           | Abwarten, Stille, Futter                  |
-| gereizt    | +Kraft, −Schutz                                 | getroffen werden, Resonanz gebrochen      |
-| ängstlich  | +Tempo, −Kraft                                  | niedrige Ausdauer, starke Treffer         |
-| übermütig  | +Kraft, +Tempo, −Fokus (Fehlschlagrisiko)       | Resonanz Stufe 3, Gegner besiegt          |
+### Level-Elemente
+Feste Inseln, **Wolkenplattformen** und **Brücken** (von unten durchspringbar), **Dornen**, **Aufwind** (trägt nach oben), **Kontrollpunkt-Laternen**, **Funken** zum Sammeln, am Ende das **verlorene Licht** (Levelziel). Geplant: bröckelnde Wolken, Ranken zum Klettern, Windstöße seitwärts, Bosse.
 
 ---
 
-## 3. Fangsystem: „Pakt statt Gefangenschaft"
-- Ausdauer eines wilden Hallis auf 0 → es **flieht**. Kein Fang durch Schwächen.
-- Jedes wilde Halli hat **Unruhe** (0–100, Start je nach Wesenszug) und **Vertrauen** (0–100).
-- Annäherungs-Aktionen (statt Angriff wählbar): **Futter anbieten**, **ruhige Essenz einsetzen**, **Abwarten**, **Zurückziehen** (aktives Halli tritt einen Schritt zurück).
-  Wirkung hängt vom Wesenszug ab (Tabelle in `src/data/temperaments.js`), z. B. scheu: Abwarten/Zurückziehen stark, Futter mittel; aggressiv: ruhige Essenz stark, Abwarten schwach.
-- Angriffe erhöhen Unruhe. Unruhe 100 → Halli flieht.
-- Vertrauen ≥ Schwelle **und** Unruhe ≤ Schwelle → Option **„Echo nachsingen"**: Rhythmus-Minispiel. Das Halli spielt eine Tonfolge (Pfeiltasten, je Richtung ein Ton) vor, der Spieler wiederholt sie im Takt. Länge/Tempo je nach Art. Erfolg → **Pakt** (Halli schließt sich an). Fehlschlag → Unruhe steigt.
-
-### Wandlung (statt Level-Entwicklung)
-- Ein Halli wandelt sich nur, wenn **Bindung + Umgebung** passen, z. B. „Bindung ≥ 70, Kampf bei Nacht auf den Sturmklippen".
-- Bedingungen sind deklarativ in den Artdaten (`wandlung: { zu, bindung, biom, tageszeit, wetter }`) und werden nach jedem Kampf geprüft.
-
----
-
-## 4. Technik & Architektur
+## 2. Technik & Architektur
 
 ### Rahmen
-- **Dynamische interne Auflösung:** Die kürzere Bildschirmseite hat immer **180 Spielpixel**, die längere passt sich dem Gerät an (Hochformat z. B. 195×422, Querformat 422×195). Kein Letterboxing. Skaliert wird möglichst in ganzen Gerätepixeln, CSS `image-rendering: pixelated`, `ctx.imageSmoothingEnabled = false`.
-- Szenen/UI dürfen deshalb **keine feste Breite/Höhe annehmen** – immer `r.width`/`r.height` verwenden und in beiden Ausrichtungen prüfen.
-- Tiles **16×16**. Overworld-Sprites 16×16, Kampf-Sprites 32×32. Bäume sind zweistöckig (`top` wird über Figuren gezeichnet).
-- Zeichenreihenfolge Overworld: Himmel/Wolken → Boden → Übergänge (`world/tileDecor.js`) → Figuren → Überlagerung (Baumkronen) → Partikel → HUD.
-- **Fester Zeitschritt**: `update(dt)` mit 1/60 s, `render()` einmal pro Frame (requestAnimationFrame, Akkumulator).
-- **Starten:** ES-Module funktionieren nicht über `file://`. Lokal mit einem statischen Server starten:
-  `python3 -m http.server 8000` im Projektordner → `http://localhost:8000`. (Kein Build, keine Abhängigkeiten.)
+- **Nur Querformat.** Die Höhe beträgt immer **180 Spielpixel**, die Breite passt sich dem Gerät an (z. B. 422×180). Im Hochformat pausiert das Spiel und zeigt „Bitte Handy quer halten".
+- UI und Szenen nie mit fester Breite bauen – immer `r.width`/`r.height`.
+- Skalierung möglichst in ganzen Gerätepixeln, `image-rendering: pixelated`, kein Glätten.
+- Tiles **16×16**, Figuren 16×16. Level sind 14 Tiles hoch (Kamera scrollt leicht vertikal).
+- **Fester Zeitschritt** 1/60 s (Physik stabil), Rendern per requestAnimationFrame.
+- **Starten:** `python3 -m http.server 8000` → `http://localhost:8000` (ES-Module brauchen einen Server).
 
 ### Ordnerstruktur
 ```
-index.html              Canvas + Laden von src/main.js
-style.css               Vollbild, Skalierung, pixelated
+index.html, style.css     Vollbild-Canvas, Safe-Area, kein Zoomen/Scrollen
 src/
-  main.js               Einstieg: Game erstellen, erste Szene pushen
-  engine/               Generisch, spielunabhängig
-    Game.js             Game Loop, Szenen-Stack, globale Systeme
-    Renderer.js         Canvas, Skalierung, Zeichen-Helfer, Text (Pixel-Font)
-    Input.js            Touch (Tippen/Halten) → Eingaben; Tastatur nur als Entwicklerhilfe
-    Camera.js           Folgt Ziel, klemmt an Kartenrand
-    Tilemap.js          Ebenen, Kollision, Rendering sichtbarer Tiles
-    SpriteSheet.js      Pixel-Arrays → gecachte Offscreen-Canvases
-    Scene.js            Basisklasse (enter/exit/update/render)
-    Audio.js            Web Audio API (Phase 6)
-    rng.js              Seedbarer Zufall
-  world/                Overworld: Spieler, Karten, Hallis in der Welt, Zeit, Wetter
-  battle/               Zeitleiste, Resonanz, Stimmung, Kampf-KI, Kampfszene
-  creatures/            Halli-Instanzen, Werte, Bindung, Wandlung, Pakt-Logik
-  ui/                   Menüs, Dialogboxen, HUD, Rhythmus-Minispiel-UI
-  data/                 Reine Daten: Arten, Fähigkeiten, Karten, Paletten, Sprites, NPCs
+  main.js                 Einstieg (Querformat-Pflicht, Titelbild)
+  engine/                 Generisch, spielunabhängig
+    Game.js               Loop, Szenen-Stack, Querformat-Sperre
+    Renderer.js           Canvas, Skalierung, Pixel-Schrift (auch vergrößert)
+    Input.js              Mehrfinger-Touch, Taps, Tastatur (Entwicklerhilfe)
+    Tilemap.js            Tile-Raster, Varianten, Rendering
+    SpriteSheet.js        Pixel-Arrays → gecachte Canvases
+    Particles.js          Partikel
+    Scene.js, Camera.js, rng.js
+  level/                  Level-Laufzeit
+    Level.js              Objekte, Kollisionen, Spielregeln, Ereignisse
+    levelLoader.js        Textzeilen → Tiles + Objekte (Autotiling)
+    physics.js            Rechteck-gegen-Raster-Kollision (rein, getestet)
+    Background.js         Parallax-Hintergrund
+    levelDecor.js         Inselkanten, Tiefenschatten, Aufwind-Linien
+  entities/               Hero.js, Enemy.js, items.js (Funken, Schüsse, Kontrollpunkt, Licht)
+  scenes/                 TitleScene, LevelScene, PauseScene
+  ui/                     TouchControls.js (Bildschirmtasten), hud.js
+  data/                   Reine Daten: palette, font, tiles, balance, sprites/, levels/
+tests/                    node --test (Physik, Daten, Level)
 ```
 
 ### Architekturregeln
-- **Szenen-Stack** im `Game`: z. B. `OverworldScene` → `BattleScene` → `PactScene`. Nur die oberste Szene erhält Input; darunterliegende können optional weiter gerendert werden.
-- **Logik und Darstellung trennen**: `battle/` enthält eine reine Kampf-Logik (`BattleState`, ohne Canvas-Zugriff), die Szene liest nur ihren Zustand und zeichnet. Dadurch ist die Logik im Browser-Konsolen-Test oder per Node prüfbar.
-- **Datengetrieben**: Arten, Fähigkeiten, Karten, NPCs, Dialoge liegen als exportierte Objekte in `src/data/`. Neue Inhalte = neue Daten, kein neuer Code.
-- `engine/` importiert **nie** aus `world/`, `battle/` usw.
-- Kein globaler Zustand außer der `Game`-Instanz; Systeme werden über den Konstruktor weitergereicht.
+- **Daten getrennt von Logik:** Sprites, Tiles, Level und alle Spielwerte (`data/balance.js`) liegen in `src/data/`. Neue Level = neue Datei in `data/levels/`.
+- **Logik testbar halten:** `level/physics.js` und `level/levelLoader.js` greifen nicht auf Canvas/DOM zu.
+- `Level` meldet Ereignisse (`jump`, `hurt`, `stomp`, `spark`, `complete` …) über `takeEvents()`; Szene/Sound reagieren darauf (Kamera-Wackeln, später Töne).
+- `engine/` importiert nie aus anderen Ordnern außer `data/font.js`.
+- Szenen-Stack: `TitleScene` → `LevelScene` (+ `PauseScene` als transparentes Overlay).
+
+### Level-Format
+Level sind Textzeilen (`data/levels/*.js`). Legende:
+`#` Boden (wird automatisch zu Grasnarbe/Erde, darunter Insel-Unterseite), `=` Wolke, `-` Brücke, `^` Dornen, `w` Aufwind, `b f g t v` Deko (Busch, Blumen, Leuchtpilz, Gras, Ranke), `P` Start, `k` Rostkäfer, `s` Dornschnecke, `q` Nebelqualle, `*` Funke, `c` Kontrollpunkt, `L` verlorenes Licht.
 
 ### Pixel-Art
-- Sprites als Arrays von Strings, ein Zeichen = ein Pixel, `.` = transparent. Zeichen werden über eine Palette (max. 16 Farben) auf Farben gemappt:
-  ```js
-  export const PALETTE = { a: '#1a1c2c', b: '#5d275d', ... };
-  export const moosbock = { size: 16, frames: [[ '....aa....', ... ]] };
-  ```
-- `SpriteSheet` rendert jedes Sprite einmalig in einen Offscreen-Canvas und cached ihn.
-- Eine **globale Hauptpalette** (16 Farben) in `src/data/palette.js`. Tag/Nacht und Wetter werden als Farbüberlagerung (Tint) gerendert, nicht über eigene Paletten.
-- Text über eine eigene 5×7- bzw. 4×6-Pixel-Bitmap-Schrift (`src/data/font.js`), inkl. Umlaute.
+- Sprites als String-Arrays, ein Zeichen = ein Pixel, `.` = transparent, Zeichen → Farbe über **eine globale 16-Farben-Palette** (`data/palette.js`).
+- Figuren blicken nach rechts; links wird gespiegelt.
+- Effekte (Lichtschein, Partikel, Wackeln) im Code, nicht als zusätzliche Farben.
+- Schrift: eigene 3×5-Pixelschrift (`data/font.js`), Großbuchstaben + Umlaute, per `scale` vergrößerbar.
 
-### Speichern
-- `localStorage`-Key `driftlande.save.v1`. JSON mit `version`-Feld; beim Laden Migration über `version`.
-- Gespeichert: Position/Karte, Team, Halli-Instanzen (Art, Werte, Fähigkeiten, Bindung), Inventar, Flags (Story/NPC), Spielzeit.
+### Handy-Steuerung (verbindlich)
+- Bildschirmtasten im Pixel-Stil **im Canvas** (`ui/TouchControls.js`): links ◀ ▶, rechts **B = Funke**, **A = Sprung**. Mehrere Finger gleichzeitig; jeder Finger zählt für die nächstgelegene Taste (großzügige Trefferfläche).
+- Menüs/Pause werden **per Tippen** bedient (Pause-Symbol oben rechts).
+- Spielgefühl: Coyote-Time, Sprungpuffer, variable Sprunghöhe – Werte in `data/balance.js`.
+- Tastatur nur als Entwicklerhilfe: Pfeile/WASD, Leertaste/↑ springen, X schießen, Esc Pause.
+
+### Speichern (ab Phase 4)
+`localStorage`-Key `funkenflug.save.v1`, JSON mit `version`. Gespeichert: freigeschaltete Level, beste Zeiten, gesammelte Funken/Lichter, Einstellungen.
 
 ---
 
-### Handy & Touch (verbindlich)
-- **Keine Bildschirm-Knöpfe, kein Steuerkreuz.** Bedient wird direkt im Spielbild:
-  - **Tippen** auf ein Feld → Figur läuft per Wegfindung (`world/pathfinding.js`) hin.
-  - **Tippen auf ein Objekt** (Baum, Stein, später NPC/Halli) → hingehen, hindrehen, interagieren.
-  - **Finger halten/ziehen** → Figur läuft in Richtung des Fingers.
-  - **Menü-Symbol** oben rechts (im Canvas gezeichnet, `ui/hud.js`).
-- Menüs, Kampf und Dialoge werden **per Tippen auf Einträge** bedient (große Trefferflächen, ≥ 16 Spielpixel). Das Rhythmus-Minispiel nutzt **Wischgesten** in vier Richtungen.
-- HUD-Elemente mit Abstand zum Rand; die Spielfläche liegt innerhalb der Safe-Area (Notch/Home-Leiste).
-- Tastatur (Pfeile/WASD, Enter, Esc, F1–F4) bleibt nur als Entwicklerhilfe am PC.
+## 3. Coding-Konventionen
+- Bezeichner auf **Englisch**, Spieltexte und Kommentare auf **Deutsch**.
+- ES2020+, `const`/`let`, benannte Exporte, keine Bibliotheken, kein Build, kein TypeScript (JSDoc für zentrale Strukturen).
+- Klassen in `PascalCase.js`, Funktionsmodule/Daten in `camelCase.js`.
+- Pixel-Koordinaten beim Zeichnen immer runden.
+- Zufall nur über `engine/rng.js` (seedbar).
+- Spielwerte nie in die Logik schreiben, sondern in `data/balance.js`.
+- Nach jeder Phase muss das Spiel lauffähig sein; Tests mit `node --test` grün.
 
-## 5. Coding-Konventionen
-- **Sprache:** Bezeichner (Variablen, Funktionen, Klassen, Dateinamen) auf **Englisch**; **Spieltexte und Daten-Schlüssel der Spielwelt** (Essenzen, Stimmungen, Wesenszüge, Namen) auf **Deutsch**, ohne Umlaute in Schlüsseln (`stroemung`, `aengstlich`). Kommentare auf Deutsch, knapp.
-- ES2020+, `const`/`let`, keine `var`. Strikte ES-Module, benannte Exporte (kein `export default`).
-- Klassen in `PascalCase.js` (eine Hauptklasse pro Datei), Funktionsmodule/Daten in `camelCase.js`.
-- Keine externen Bibliotheken, keine Build-Tools, kein TypeScript. JSDoc-Typen für zentrale Strukturen.
-- Pixel-Koordinaten immer ganzzahlig zeichnen (`Math.round` bzw. `| 0`) – kein Subpixel-Verwischen.
-- Zufall nur über `engine/rng.js` (seedbar, für reproduzierbare Tests).
-- Magic Numbers für Balancing gehören in `src/data/` (z. B. `balance.js`), nicht in die Logik.
-- Kleine, fokussierte Commits pro Feature. Nach jeder Phase muss das Spiel lauffähig sein.
+## 4. Testen
+- Am PC: Server starten, Entwicklertools → Gerätemodus (Handy quer). `?touch` erzwingt die Bildschirmtasten, `?debug` zeigt FPS.
+- Auf dem Handy: gleiches WLAN, `http://<IP-des-Rechners>:8000`.
+- `node --test` für Physik, Level-Parser und Sprite-Daten.
 
-## 6. Testen
-- Server starten: `python3 -m http.server 8000`, Browser auf `http://localhost:8000`.
-- Am PC mit den Entwicklertools des Browsers im Handy-Modus testen (Gerätesymbol, z. B. iPhone, Hoch- und Querformat).
-- Debug-Tasten (nur bei `?debug` in der URL, PC): F1 Kollisionen/Grid, F2 Tageszeit vorspulen, F3 Wetter wechseln, F4 sofortige Begegnung.
-- Reine Logikmodule (Zeitleiste, Resonanz, Pakt) können mit `node --test` geprüft werden (Node ≥ 18, keine Abhängigkeiten) – Tests liegen in `/tests`.
-
-## 7. Entwicklungsplan
+## 5. Entwicklungsplan
 Siehe `docs/PLAN.md`. Nach jeder Phase: lauffähig, Testanleitung, auf Feedback warten.

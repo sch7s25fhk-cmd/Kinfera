@@ -8,16 +8,19 @@ const MAX_FRAME = 0.25; // verhindert "Todesspirale" nach Tab-Wechsel
 
 export class Game {
   /**
-   * @param {{ canvas: HTMLCanvasElement, shortSide: number }} opts
+   * @param {{ canvas: HTMLCanvasElement, shortSide: number, landscapeOnly?: boolean,
+   *           renderRotateHint?: (r: Renderer) => void }} opts
    */
-  constructor({ canvas, shortSide }) {
+  constructor({ canvas, shortSide, landscapeOnly = false, renderRotateHint = null }) {
+    this.landscapeOnly = landscapeOnly;
+    this.renderRotateHint = renderRotateHint;
     this.renderer = new Renderer(canvas, shortSide);
     this.input = new Input(window);
     this.input.attachPointer(canvas, (cx, cy) => this.renderer.toGame(cx, cy));
     /** @type {import('./Scene.js').Scene[]} */
     this.scenes = [];
     this.time = 0; // Spielzeit in Sekunden
-    this.debug = new URLSearchParams(window.location.search).has('debug') || window.DRIFTLANDE_DEBUG === true;
+    this.debug = new URLSearchParams(window.location.search).has('debug');
     this.fps = 0;
 
     this.accumulator = 0;
@@ -60,6 +63,13 @@ export class Game {
     this.lastTimestamp = timestamp;
     this.accumulator += delta;
 
+    // Im Hochformat pausiert ein reines Querformat-Spiel
+    const paused = this.isPortraitBlocked();
+    if (paused) {
+      this.accumulator = 0;
+      this.input.endStep();
+    }
+
     while (this.accumulator >= STEP) {
       this.time += STEP;
       this.scene?.update(STEP);
@@ -80,7 +90,15 @@ export class Game {
     requestAnimationFrame(this.frame);
   }
 
+  isPortraitBlocked() {
+    return this.landscapeOnly && this.renderer.height > this.renderer.width;
+  }
+
   render() {
+    if (this.isPortraitBlocked()) {
+      this.renderRotateHint?.(this.renderer);
+      return;
+    }
     // Von der obersten nicht-transparenten Szene an aufwärts zeichnen
     let start = this.scenes.length - 1;
     while (start > 0 && this.scenes[start].transparent) start--;

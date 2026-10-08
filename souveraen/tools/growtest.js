@@ -60,13 +60,13 @@ for (const k in G.mil.occ) {
 if (!spot) fail('kein Bauplatz auf erobertem Land'); else {
   const c = S.foundCity(G, spot[0], spot[1], 'Neustadt', 'modern', 'raster', false);
   G.eco.money = money;
-  for (let m = 0; m < 6; m++) S.tick(G);
+  G.continuous = false; for (let m = 0; m < 6; m++) S.tick(G);
   console.log('Neustadt auf', S.World.countryIndex && S.WORLD[S.Mil.baseOwner(spot[0] + G.gx0, spot[1] + G.gy0) - 1].id, '-Boden: Felder', c.tiles, 'Einwohner', Math.round(c.pop));
   // Vergleich: Neugründung im Kernland
   let ref = null;
   for (let i = 0; i < G.W * G.H && !ref; i += 37) { const x = i % G.W, y = (i / G.W) | 0; if (S.Mil.baseOwner(x + G.gx0, y + G.gy0) === home && S.canFoundCity(G, x, y).ok) ref = [x, y]; }
   const c2 = S.foundCity(G, ref[0], ref[1], 'Kernstadt', 'modern', 'raster', false);
-  for (let m = 0; m < 6; m++) S.tick(G);
+  G.continuous = false; for (let m = 0; m < 6; m++) S.tick(G);
   console.log('Neustadt nach 12 Monaten', c.tiles, 'Felder,', Math.round(c.pop), 'Einw.; Kernstadt nach 6 Monaten', c2.tiles, 'Felder,', Math.round(c2.pop), 'Einw.');
   if (G.t.bld[c.y * G.W + c.x] !== S.U.HALL || c.pop <= 120) fail('Neustadt lebt nicht');
 }

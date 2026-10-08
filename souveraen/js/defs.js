@@ -10,9 +10,9 @@
     'Regenwald', 'Nadelwald', 'Hügelland', 'Gebirge', 'Eis & Schnee', 'Tundra', 'Sumpf'];
   // Grundfarben pro Landschaft (RGB)
   S.BIOME_RGB = [
-    [28, 72, 112], [46, 112, 158], [226, 211, 158], [128, 172, 88], [168, 166, 104], [186, 178, 100],
-    [222, 196, 138], [86, 138, 66], [48, 118, 64], [70, 112, 82], [140, 160, 96], [138, 128, 112],
-    [236, 241, 245], [160, 172, 150], [96, 128, 92]
+    [18, 48, 80], [34, 86, 118], [212, 198, 158], [108, 136, 70], [160, 154, 104], [168, 152, 94],
+    [212, 184, 136], [54, 88, 46], [36, 80, 42], [44, 72, 54], [118, 126, 82], [126, 116, 102],
+    [236, 240, 244], [138, 140, 118], [80, 98, 70]
   ];
   // Fruchtbarkeit für Landwirtschaft
   S.FERTILITY = [0, 0, 0.3, 1.0, 0.7, 0.75, 0.15, 0.6, 0.55, 0.4, 0.6, 0.05, 0, 0.25, 0.45];
@@ -204,4 +204,67 @@
 
   // Marktpreise (Mio. T pro Einheit)
   S.PRICES = { food: 0.55, raw: 0.6, goods: 1.6 };
+
+  // ---------- Gesetze und Programme: Entscheidungen statt Einzelbefehle ----------
+  // Jede Option trägt ihre Wirkungen als Werte; fehlende Werte gelten als neutral.
+  // cost: Anteil der Grundkosten je 1.000 Einwohner (wie die Staatsaufgaben), flat: feste Mio. T pro Monat
+  S.LAWS = [
+    { key: 'housing', group: 'Gesellschaft', name: 'Wohnungsbau', def: 'markt', opts: [
+      { key: 'markt', name: 'Freier Markt', desc: 'Bauträger bauen, wenn sich Wohnungen lohnen. Kostet nichts.' },
+      { key: 'foerderung', name: 'Bauförderung', desc: 'Zuschüsse für Neubauten: Städte wachsen deutlich schneller.', build: 1.9, cost: 0.06 },
+      { key: 'sozial', name: 'Sozialer Wohnungsbau', desc: 'Der Staat baut selbst: schnelleres Wachstum, Wohnungsnot halbiert, zufriedenere Menschen.', build: 1.5, shortage: 0.5, happy: 2, cost: 0.12 }
+    ] },
+    { key: 'immigration', group: 'Gesellschaft', name: 'Zuwanderung', def: 'begrenzt', opts: [
+      { key: 'geschlossen', name: 'Geschlossen', desc: 'Kaum Zuzug. Manche begrüßen das, aber Arbeitskräfte werden knapp.', migr: -0.004, happy: 1 },
+      { key: 'begrenzt', name: 'Begrenzt', desc: 'Zuzug nach Bedarf der Wirtschaft.' },
+      { key: 'offen', name: 'Offen', desc: 'Viele Menschen ziehen zu: Städte wachsen kräftig, die Stimmung ist geteilt.', migr: 0.007, happy: -1 }
+    ] },
+    { key: 'family', group: 'Gesellschaft', name: 'Familienpolitik', def: 'normal', opts: [
+      { key: 'wenig', name: 'Zurückhaltend', desc: 'Spart Geld, aber weniger Geburten.', natural: 0.6, happy: -1 },
+      { key: 'normal', name: 'Kindergeld', desc: 'Übliche Unterstützung für Familien.' },
+      { key: 'stark', name: 'Familienoffensive', desc: 'Kitas, Elterngeld, Familienwohnungen: viel mehr Geburten und Zufriedenheit.', natural: 2, happy: 2, cost: 0.07 }
+    ] },
+    { key: 'environment', group: 'Wirtschaft', name: 'Umweltauflagen', def: 'normal', opts: [
+      { key: 'locker', name: 'Locker', desc: 'Industrie produziert mehr, die Luft wird schlechter.', poll: 1.4, ind: 1.08, happy: -1 },
+      { key: 'normal', name: 'Normal', desc: 'Übliche Grenzwerte.' },
+      { key: 'streng', name: 'Streng', desc: 'Saubere Luft, etwas weniger Industrieleistung.', poll: 0.55, ind: 0.92, happy: 2 }
+    ] },
+    { key: 'conscription', group: 'Militär', name: 'Wehrdienst', def: 'freiwillig', opts: [
+      { key: 'beruf', name: 'Berufsarmee', desc: 'Nur Zeitsoldaten: wenig Personal, keine Last für Wirtschaft und Stimmung.', share: 0.002, happy: 1 },
+      { key: 'freiwillig', name: 'Freiwilliger Wehrdienst', desc: 'Wie viele dienen, hängt von der Zustimmung im Land ab.', share: 0.005 },
+      { key: 'pflicht', name: 'Wehrpflicht', desc: 'Viel mehr Soldaten. Junge Leute fehlen der Wirtschaft, Unmut wächst.', share: 0.015, work: 0.012, happy: -3, will: 0.25 },
+      { key: 'mobil', name: 'Generalmobilmachung', desc: 'Alle Wehrfähigen unter Waffen. Die Wirtschaft leidet stark; nur im Krieg erträglich.', share: 0.04, work: 0.05, happy: -8, warHappy: 5, will: 0.4 }
+    ] },
+    { key: 'milbudget', group: 'Militär', name: 'Rüstungsetat', def: 'normal', opts: [
+      { key: 'knapp', name: 'Knapp', desc: 'Alte Ausrüstung: billiger, aber schwächer.', upkeep: 0.75, power: 0.88 },
+      { key: 'normal', name: 'Normal', desc: 'Solide Ausrüstung.' },
+      { key: 'hoch', name: 'Hoch', desc: 'Moderne Waffen und Fahrzeuge: deutlich stärker, deutlich teurer.', upkeep: 1.45, power: 1.12 },
+      { key: 'kriegswirtschaft', name: 'Kriegswirtschaft', desc: 'Fabriken arbeiten für die Armee: stärkste Truppen, weniger Güter, Unmut.', upkeep: 2, power: 1.22, ind: 0.93, happy: -2 }
+    ] },
+    { key: 'training', group: 'Militär', name: 'Ausbildung', def: 'normal', opts: [
+      { key: 'kurz', name: 'Schnellausbildung', desc: 'Truppen sind fast doppelt so schnell bereit, aber unerfahren.', time: 0.55, xp: 0, power: 0.95 },
+      { key: 'normal', name: 'Grundausbildung', desc: 'Übliche Dauer, etwas Erfahrung.', xp: 0.1 },
+      { key: 'gruendlich', name: 'Gründlich', desc: 'Dauert länger, dafür starten Truppen erfahren.', time: 1.7, xp: 0.4 }
+    ] },
+    { key: 'propaganda', group: 'Militär', name: 'Kriegspropaganda', def: 'aus', opts: [
+      { key: 'aus', name: 'Keine', desc: 'Die Presse berichtet frei.' },
+      { key: 'an', name: 'Propaganda', desc: 'Weniger Kriegsmüdigkeit, mehr Freiwillige – Demokraten mögen das nicht.', weary: 0.6, will: 0.12, happy: -1, demHappy: -2, flat: 6 }
+    ] },
+    { key: 'care', group: 'Militär', name: 'Soldatenfürsorge', def: 'normal', opts: [
+      { key: 'gering', name: 'Gering', desc: 'Spart Geld, Verwundete erholen sich langsam, die Moral sinkt.', heal: 0.75, morale: -0.12, upkeep: 0.9 },
+      { key: 'normal', name: 'Normal', desc: 'Übliche Versorgung.' },
+      { key: 'gut', name: 'Vorbildlich', desc: 'Lazarette, Sold, Heimaturlaub: schnelle Genesung, hohe Moral, mehr Freiwillige.', heal: 1.4, morale: 0.12, upkeep: 1.15, will: 0.1, happy: 1 }
+    ] }
+  ];
+  S.LAW_BY = Object.fromEntries(S.LAWS.map(l => [l.key, l]));
+  /** gewählte Option eines Gesetzes */
+  S.lawOpt = function (G, key) {
+    const L = S.LAW_BY[key];
+    const k = (G.laws && G.laws[key]) || L.def;
+    return L.opts.find(o => o.key === k) || L.opts.find(o => o.key === L.def);
+  };
+  /** Wert einer Wirkung, sonst der neutrale Wert */
+  S.lawv = (G, key, field, neutral) => { const v = S.lawOpt(G, key)[field]; return v === undefined ? neutral : v; };
+  /** Summe einer Wirkung über alle Gesetze */
+  S.lawSum = (G, field) => S.LAWS.reduce((s, l) => s + (S.lawOpt(G, l.key)[field] || 0), 0);
 })(S);

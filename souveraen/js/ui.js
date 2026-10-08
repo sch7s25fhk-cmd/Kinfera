@@ -6,7 +6,7 @@
   const esc = S.esc;
   const R = S.R;
 
-  const TABS = [['lage', 'Lage'], ['auswahl', 'Auswahl'], ['haushalt', 'Haushalt'], ['militaer', 'Militär'], ['staedte', 'Städte'], ['chronik', 'Chronik']];
+  const TABS = [['lage', 'Lage'], ['auswahl', 'Auswahl'], ['gesetze', 'Gesetze'], ['haushalt', 'Haushalt'], ['militaer', 'Militär'], ['staedte', 'Städte'], ['chronik', 'Chronik']];
   const VIEWS = [['none', 'Gelände'], ['pop', 'Wohndichte'], ['happy', 'Zufriedenheit'], ['poll', 'Verschmutzung'], ['fert', 'Fruchtbarkeit'], ['res', 'Rohstoffe'], ['net', 'Verkehrsnetz']];
 
   // ======================= Aufbau =======================
@@ -301,9 +301,12 @@
         const r = (k, v, cls) => '<span' + (cls ? ' class="' + cls + '"' : '') + '>' + k + '</span><span' + (cls ? ' class="' + cls + '"' : '') + '>' + S.fmtMoney(v) + '</span>';
         let h = r('Einkommensteuer', L.incomeTax) + r('Unternehmensteuer', L.corpTax) + r('Exporte', L.exports) + r('Tourismus', L.tourism);
         if (L.other > 0.5) h += r('Übrige Wirtschaft', L.other);
+        if (L.tribute > 0.1) h += r('Abgaben besetzter Städte', L.tribute);
         h += r('Einnahmen', L.income, 'sum');
         h += r('Bildung', L.services.edu) + r('Gesundheit', L.services.health) + r('Sicherheit', L.services.security) + r('Infrastruktur', L.services.infra);
         h += r('Unterhalt Bauten & Straßen', L.upkeep) + r('Importe', L.imports);
+        if (L.military > 0.1) h += r('Streitkräfte', L.military);
+        if (L.laws > 0.1) h += r('Programme aus Gesetzen', L.laws);
         if (L.pensions > 0.5) h += r('Renten & Altlasten', L.pensions);
         if (L.interest > 0.1) h += r('Zinsen', L.interest);
         h += r('Ausgaben', L.expense, 'sum') + r('Saldo', L.net, 'sum');
@@ -335,6 +338,61 @@
     }
   };
 
+  // ---------- Gesetze ----------
+  PANELS.gesetze = {
+    build(G) {
+      const groups = [...new Set(S.LAWS.map(l => l.group))];
+      const L = G.eco.last;
+      let h = '<section><h3>Gesetze</h3><p class="muted">Du regierst durch Entscheidungen: Gesetze bestimmen, wie schnell Städte wachsen, wie stark die Wirtschaft ist und wie viele Menschen bereit sind, als Soldaten zu dienen. Ein Gesetz lässt sich alle zwei Monate ändern.</p>' +
+        (L && L.laws ? '<div class="kv"><span>Kosten der Programme</span><span>' + S.fmtMoney(L.laws) + '/Mon.</span></div>' : '') + '</section>';
+      for (const g of groups) {
+        h += '<section><h4>' + g + '</h4>';
+        for (const law of S.LAWS.filter(l => l.group === g)) {
+          const cur = S.lawOpt(G, law.key);
+          const wait = Math.max(0, ((G.lawAt && G.lawAt[law.key]) ?? -99) + 2 - G.month);
+          h += '<div class="law"><div class="law-head"><b>' + esc(law.name) + '</b>' + (wait ? '<small>änderbar in ' + wait + ' Mon.</small>' : '') + '</div>' +
+            '<div class="chips">' + law.opts.map(o => '<button class="chip" data-law="' + law.key + '" data-opt="' + o.key + '" aria-pressed="' + (o.key === cur.key) + '"' + (wait && o.key !== cur.key ? ' disabled' : '') + '>' + esc(o.name) + '</button>').join('') + '</div>' +
+            '<p class="muted">' + esc(cur.desc) + lawEffects(G, cur) + '</p></div>';
+        }
+        h += '</section>';
+      }
+      return h;
+    },
+    bind(G, root) {
+      root.querySelectorAll('[data-law]').forEach(b => b.addEventListener('click', () => {
+        const key = b.dataset.law, opt = b.dataset.opt;
+        if (S.lawOpt(G, key).key === opt) return;
+        G.laws = G.laws || {}; G.lawAt = G.lawAt || {};
+        G.laws[key] = opt; G.lawAt[key] = G.month;
+        const law = S.LAW_BY[key], o = law.opts.find(x => x.key === opt);
+        S.log(G, law.name + ': ' + o.name + '.', 'info');
+        UI.toast(law.name + ': ' + o.name, 'good', 1800);
+        UI.refresh(true);
+      }));
+    }
+  };
+  function lawEffects(G, o) {
+    const e = [];
+    const pctv = (v) => (v > 1 ? '+' : '−') + Math.round(Math.abs(v - 1) * 100) + ' %';
+    if (o.build) e.push('Bautätigkeit ' + pctv(o.build));
+    if (o.migr) e.push('Zuzug ' + (o.migr > 0 ? '+' : '−') + S.fmt1(Math.abs(o.migr) * 100) + ' %/Mon.');
+    if (o.natural) e.push('Geburten ' + pctv(o.natural));
+    if (o.poll) e.push('Verschmutzung ' + pctv(o.poll));
+    if (o.ind) e.push('Industrie ' + pctv(o.ind));
+    if (o.share) e.push('Wehrfähige ' + S.fmt1(o.share * 100) + ' % der Bevölkerung');
+    if (o.work) e.push('Arbeitskräfte −' + S.fmt1(o.work * 100) + ' %');
+    if (o.power) e.push('Kampfkraft ' + pctv(o.power));
+    if (o.upkeep) e.push('Unterhalt Armee ' + pctv(o.upkeep));
+    if (o.time) e.push('Ausbildungsdauer ' + pctv(o.time));
+    if (o.xp) e.push('Startfahrung ' + Math.round(o.xp * 100) + ' %');
+    if (o.heal) e.push('Genesung ' + pctv(o.heal));
+    if (o.weary) e.push('Kriegsmüdigkeit ' + pctv(o.weary));
+    if (o.happy) e.push('Zufriedenheit ' + (o.happy > 0 ? '+' : '') + o.happy);
+    if (o.cost) e.push('Kosten ' + S.fmtMoney(o.cost * (G.eco.last ? G.eco.last.pop / 1000 * (0.45 + 0.55 * S.INCOME[G.meta.inc].wage) : 0)) + '/Mon.');
+    if (o.flat) e.push('Kosten ' + S.fmtMoney(o.flat) + '/Mon.');
+    return e.length ? '<br><b class="eff">' + e.join(' · ') + '</b>' : '';
+  }
+
   // ---------- Militär-Panel ----------
   PANELS.militaer = {
     build(G) {
@@ -345,8 +403,12 @@
         '<span>Einheiten</span><span>' + st.count + '</span>' +
         '<span>Soldaten</span><span>' + S.fmtPop(st.men) + '</span>' +
         '<span>Unterhalt</span><span>' + S.fmtMoney(M.upkeep(G)) + '/Mon.</span>' +
-        '<span>Kriegsmüdigkeit</span><span>' + (M.weariness(G) ? '−' + Math.round(M.weariness(G)) + ' Zufriedenheit' : 'keine') + '</span></div>' +
-        '<div class="chips"><button class="chip" data-retreat aria-pressed="' + (mil.autoRetreat !== false) + '">Automatischer Rückzug: ' + (mil.autoRetreat !== false ? 'an' : 'aus') + '</button></div>' +
+        '<span>Kriegsmüdigkeit</span><span>' + (M.weariness(G) ? '−' + Math.round(M.weariness(G)) + ' Zufriedenheit' : 'keine') + '</span>' +
+        (() => { const mp = M.manpower(G); return '<span>Wehrfähige verfügbar</span><span>' + S.fmtPop(mp.available) + ' von ' + S.fmtPop(mp.potential) + '</span><span>Dienstbereitschaft</span><span>' + Math.round(mp.will * 100) + ' %</span>'; })() +
+        '<span>Moral · Kampfkraft</span><span>' + Math.round(M.morale(G) * 100) + ' % · ' + Math.round(M.power(G) * 100) + ' %</span></div>' +
+        '<p class="muted">Wie viele Soldaten du hast, entscheiden Wehrdienst, Zustimmung, Gesundheit und Fürsorge; Ausrüstung, Ausbildung und Moral bestimmen ihre Stärke. <button class="linkbtn" data-goto="gesetze">Gesetze ändern</button></p>' +
+        '<div class="chips"><button class="chip" data-cmd aria-pressed="' + (mil.command !== false) + '">Oberkommando führt: ' + (mil.command !== false ? 'an' : 'aus') + '</button><button class="chip" data-retreat aria-pressed="' + (mil.autoRetreat !== false) + '">Automatischer Rückzug: ' + (mil.autoRetreat !== false ? 'an' : 'aus') + '</button></div>' +
+        '<p class="muted">Das Oberkommando führt alle Truppen ohne eigenen Befehl nach der Haltung, die du je Krieg wählst. Gibst du einer Einheit selbst einen Befehl, hält es sich vier Spieltage heraus.</p>' +
         '<p class="muted">Eingegrabene Truppen verteidigen sich besser, Erfahrung macht stärker, ohne Nachschub (eigenes Land in etwa 40 km) zehren Truppen aus. Mehrere Angreifer auf ein Ziel nutzen die Flanke.</p></section>';
       // Kriege
       const wars = Object.entries(mil.wars);
@@ -362,6 +424,7 @@
           '<div class="kv"><span>Gefallene (eigene / Feind)</span><span>' + S.fmtPop(w.ownLoss) + ' / ' + S.fmtPop(w.enemyLoss) + '</span><span>Feindliche Einheiten</span><span>' + theirs + '</span>' +
           '<span>Städte des Gegners</span><span>' + es.held + ' von ' + es.all + ' gehalten</span>' +
           (es.capital ? '<span>Hauptstadt ' + S.esc(es.capital) + '</span><span>' + (es.capitalLost ? '<b style="color:var(--good)">erobert</b>' : 'gehalten') + '</span>' : '') + '</div>' +
+          '<div class="law-head"><small>Haltung des Oberkommandos</small></div><div class="chips">' + Object.entries(M.STANCES).map(([k, n]) => '<button class="chip" data-stance="' + e + '" data-st="' + k + '" aria-pressed="' + (M.stanceOf(w) === k) + '">' + n + '</button>').join('') + '</div>' +
           '<div class="chips"><button class="chip" data-peace="' + e + '">Frieden anbieten</button><button class="chip" data-capit="' + e + '">Kapitulation fordern</button></div></div>';
       }
       h += '</section>';
@@ -410,6 +473,17 @@
         if (S.Mil.demandCapitulation(G, +b.dataset.capit) && G.pendingEvent) UI.showEvent(G.pendingEvent);
         UI.refresh(true);
       }));
+      root.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => UI.showTab(b.dataset.goto)));
+      root.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => { G.mil.command = G.mil.command === false; UI.renderPanel(true); }));
+      root.querySelectorAll('[data-stance]').forEach(b => b.addEventListener('click', () => {
+        const w = G.mil.wars[+b.dataset.stance];
+        if (!w) return;
+        w.stance = b.dataset.st;
+        for (const u of G.mil.units) if (u.o === S.World.homeIdx && !(u.manual > G.mil.hours)) u.path = null;
+        S.Mil.command(G);
+        UI.toast('Oberkommando: ' + S.Mil.STANCES[w.stance] + ' gegen ' + S.Mil.countryName(+b.dataset.stance) + '.', 'info', 2200);
+        UI.renderPanel(true);
+      }));
       root.querySelectorAll('[data-retreat]').forEach(b => b.addEventListener('click', () => {
         G.mil.autoRetreat = G.mil.autoRetreat === false;
         UI.renderPanel(true);
@@ -418,7 +492,7 @@
       root.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => {
         const r = S.Mil.recruit(G, b.dataset.rec, UI.barracks);
         if (!r.ok) UI.toast(r.reason, 'warn');
-        else { UI.toast(S.Mil.TYPES[b.dataset.rec].name + ' wird ausgebildet – bereit in ' + UI.realDur(S.Mil.TYPES[b.dataset.rec].hours) + '.', 'good', 2400); vibrate(12); }
+        else { UI.toast(S.Mil.TYPES[b.dataset.rec].name + ' wird ausgebildet – bereit in ' + UI.realDur(r.hours) + '.', 'good', 2400); vibrate(12); }
         UI.refresh(true);
       }));
       root.querySelectorAll('[data-unit]').forEach(b => b.addEventListener('click', () => {
@@ -445,6 +519,18 @@
       '<span>Tourismus</span><span>' + S.fmtMoney(c.tourism || 0) + '</span>' +
       '<span>Anbindung</span><span>' + (c.capital ? 'Hauptstadt' : c.connected ? (c.rail ? 'Straße + Bahn' : 'Straße') : 'keine') + '</span>' +
       '</div>';
+    if (c.growth !== undefined) {
+      const why = [];
+      if ((c.attract || 0) > 0.3) why.push('beliebt');
+      if (c.happy < 45) why.push('unzufrieden');
+      if (L && L.employment < 0.9) why.push('wenig Arbeit');
+      if (L && L.energyRatio < 0.85) why.push('Strommangel bremst den Bau');
+      if (!c.connected && !c.capital) why.push('keine Anbindung');
+      if (c.pop > c.cap * 0.95) why.push('Wohnungen knapp');
+      h += '<div class="kv"><span>Wachstum</span><span class="' + (c.growth >= 0 ? 'up' : 'down') + '">' + (c.growth >= 0 ? '+' : '') + S.fmt1(c.growth * 100) + ' %/Monat</span>' +
+        '<span>Neubauten</span><span>' + S.fmt1(c.buildRate || 0) + '/Monat</span></div>' +
+        (why.length ? '<p class="muted">' + why.join(' · ') + '</p>' : '');
+    }
     if (c.hc) h += '<h4>Zufriedenheit: ' + Math.round(c.happy) + ' %</h4>' + happyBars(c.hc);
     if (c.hist.length > 2) {
       const g = c.hist.length >= 13 ? (c.hist[c.hist.length - 1] / c.hist[c.hist.length - 13] - 1) * 100 : null;
@@ -898,9 +984,10 @@
     cv.width = 68; cv.height = 68;
     const c = cv.getContext('2d');
     c.scale(2, 2);
-    const col = R.unitColor(u.o);
-    c.fillStyle = col; c.beginPath(); c.roundRect ? c.roundRect(0, 4, 34, 26, 6) : c.rect(0, 4, 34, 26); c.fill();
-    S.drawUnitPic(c, u.type, 17, 16.5, 28, myUnit(u) ? '#1b2531' : '#fff', col, 1);
+    S.Sprites.markOf = R.unitColor;
+    const h = S.Sprites.height(u.type), sc = Math.min(1.1, 30 / h, u.type === 'inf' ? 1 : 0.62);
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(17, 30, 13, 3.2, 0, 0, Math.PI * 2); c.fill();
+    S.Sprites.draw(c, u.type, u.o, u.type === 'inf' ? 16 : 15, 30, 1, 'stand', 0, sc, 2);
     return cv;
   }
 
@@ -935,11 +1022,11 @@
     let info;
     if (UI.orderMode) info = '<b>Tippe auf das Marschziel.</b> Ein Ziel in einem fremden Land bedeutet Krieg.';
     else if (units.length > 1) info = 'Ø Stärke ' + Math.round(units.reduce((s, u) => s + u.hp, 0) / units.length) + ' % · ' + units.filter(u => u.fight || u.under).length + ' im Gefecht';
-    else info = 'Stärke ' + Math.max(0, Math.round(u0.hp)) + ' % · ' + unitStatus(G, u0) + '<br><small>' + unitTags(u0) + '</small>' + (own ? '' : '<br>' + T.desc);
+    else info = 'Stärke ' + Math.max(0, Math.round(u0.hp)) + ' % · ' + unitStatus(G, u0) + '<br><small>' + unitTags(u0) + (own ? ' · ' + (u0.manual > G.mil.hours ? 'eigener Befehl' : 'Oberkommando') : '') + '</small>' + (own ? '' : '<br>' + T.desc);
     $('abInfo').innerHTML = info;
     const ok = $('abOk');
     if (own && !UI.orderMode) {
-      $('abExtra').innerHTML = '<button class="btn btn-small" data-act="group">+ Truppen ringsum</button><button class="btn btn-small" data-act="halt">Halt</button>';
+      $('abExtra').innerHTML = '<button class="btn btn-small" data-act="group">+ Truppen ringsum</button><button class="btn btn-small" data-act="halt">Halt</button>' + (units.some(u => u.manual > G.mil.hours) ? '<button class="btn btn-small" data-act="release">Ans Oberkommando</button>' : '');
       ok.hidden = false; ok.disabled = false; ok.textContent = 'Marschziel';
     } else if (UI.orderMode) {
       $('abExtra').innerHTML = '<button class="btn btn-small" data-act="cancelOrder">Abbrechen</button>';
@@ -957,7 +1044,8 @@
       const ids = G.mil.units.filter(u => myUnit(u) && Math.hypot(u.x - sel[0].x, u.y - sel[0].y) <= r).map(u => u.id);
       UI.selectUnits(ids);
       UI.toast(ids.length + ' Einheiten ausgewählt.', 'info', 1400);
-    } else if (act === 'halt') { for (const u of sel) if (myUnit(u)) u.path = null; syncPreview(); }
+    } else if (act === 'halt') { for (const u of sel) if (myUnit(u)) { u.path = null; u.manual = G.mil.hours + 96; } syncPreview(); }
+    else if (act === 'release') { for (const u of sel) if (myUnit(u)) u.manual = 0; S.Mil.command(G); UI.toast('Das Oberkommando führt diese Truppen wieder.', 'info', 1800); syncPreview(); }
     else if (act === 'cancelOrder') { UI.orderMode = false; syncPreview(); }
   }
 
@@ -1308,10 +1396,12 @@
       '<p><b>Strom.</b> Ohne genug Kraftwerke stockt die Industrie und Städte wachsen nicht in die Höhe.</p>' +
       '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zu einer Stadt führt. Städte ohne Verbindung zur Hauptstadt sind unzufrieden.</p>' +
       '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
+      '<p><b>Gesetze.</b> Im Tab „Gesetze“ regierst du durch Entscheidungen: Bauförderung und sozialer Wohnungsbau lassen Städte schneller wachsen, Zuwanderung und Familienpolitik bringen Menschen, Umweltauflagen tauschen saubere Luft gegen Industrie. Wehrdienst, Rüstungsetat, Ausbildung, Propaganda und Soldatenfürsorge bestimmen, wie viele Soldaten du hast und wie gut sie kämpfen.</p>' +
+      '<p><b>Wachstum.</b> Städte wachsen jeden Tag von selbst, wenn die Menschen zufrieden sind, Arbeit und Strom haben und angebunden sind. Das Stadt-Panel zeigt Wachstum, Neubauten und was bremst.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
       '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
-      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Stillstehende Truppen graben sich ein, Erfahrung bringt Sterne, ohne eigenes Land in der Nähe fehlt der Nachschub, und mehrere Angreifer auf ein Ziel nutzen die Flanke. Fällt die Hauptstadt des Gegners, kapituliert er: Du kannst das ganze Land annektieren. Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
+      '<p><b>Militär.</b> Das Oberkommando führt deine Truppen selbst: Lege im Militär-Panel je Krieg fest, ob verteidigt, die Front gehalten oder angegriffen wird. Soldaten kommen aus der Bevölkerung – wie viele, hängt von Gesetzen und Zustimmung ab. Du kannst auch selbst eingreifen: Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Stillstehende Truppen graben sich ein, Erfahrung bringt Sterne, ohne eigenes Land in der Nähe fehlt der Nachschub, und mehrere Angreifer auf ein Ziel nutzen die Flanke. Fällt die Hauptstadt des Gegners, kapituliert er: Du kannst das ganze Land annektieren. Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });

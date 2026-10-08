@@ -48,8 +48,11 @@
       if (!u.fight) continue;
       const v = byId.get(u.fight);
       if (!v) continue;
-      const [x0, y0] = R.gToScreen(u.x, u.y), [x1, y1] = R.gToScreen(v.x, v.y);
+      const pu = R.unitPos && R.unitPos.get(u.id), pv = R.unitPos && R.unitPos.get(v.id);
+      let [x0, y0] = pu ? [pu.x, pu.y] : R.gToScreen(u.x, u.y), [x1, y1] = pv ? [pv.x, pv.y] : R.gToScreen(v.x, v.y);
       if (off(x0, y0) && off(x1, y1)) continue;
+      // Mündung und Treffer auf Höhe der Figuren
+      y0 -= u.type === 'inf' ? 14 : 10; y1 -= v.type === 'inf' ? 10 : 6;
       const dx = x1 - x0, dy = y1 - y0, dist = Math.hypot(dx, dy) || 1;
       const seed = (u.id * 0.6180339) % 1;
       if (u.type === 'art') {

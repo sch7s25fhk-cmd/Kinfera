@@ -238,7 +238,7 @@
         const tt = T[a] * w00 + T[b] * w10 + T[c] * w01 + T[d] * w11;
         const f = F[a] * w00 + F[b] * w10 + F[c] * w01 + F[d] * w11 + (n1 - 0.5) * 0.7;
         const ir = IR[a] * w00 + IR[b] * w10 + IR[c] * w01 + IR[d] * w11 + (n2 - 0.5) * 0.4;
-        const col = landColor(e, m, tt, f, ir, (1 - v) * (E[b] - E[a]) + v * (E[d] - E[c]), (1 - u) * (E[c] - E[a]) + u * (E[d] - E[b]), grain);
+        const col = landColor(e, m, tt, f, ir, (1 - v) * (E[b] - E[a]) + v * (E[d] - E[c]), (1 - u) * (E[c] - E[a]) + u * (E[d] - E[b]), grain, qx, qy, PX, n1, n2);
         const o = (py * IW + px) * 4;
         data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = 255;
       }
@@ -248,25 +248,68 @@
   }
 
   const _col = [0, 0, 0];
-  function landColor(e, m, tt, f, ir, dx, dy, grain) {
+  // Feldfrüchte aus der Luft: Weizen, Raps, gepflügter Acker, junges Grün, Wiese, Stoppelfeld
+  const FIELDS = [[196, 178, 108], [176, 170, 70], [128, 104, 76], [104, 132, 62], [92, 120, 58], [168, 152, 112], [118, 140, 74]];
+  /**
+   * Bodenfarbe wie auf einem Luftbild: natürliche Landschaftsfarben, Äcker als Flickenteppich,
+   * Kronendach im Wald, Fels und Schnee im Gebirge, Licht von Nordwesten.
+   */
+  function landColor(e, m, tt, f, ir, dx, dy, grain, qx, qy, PX, n1, n2) {
     let r, g, bl;
     if (e < 0) {
-      const dep = S.clamp(-e / 0.4, 0, 1);
-      r = 70 - 48 * dep; g = 146 - 84 * dep; bl = 182 - 74 * dep;
-      if (e > -0.025) { r += 30; g += 26; bl += 14; }
-      r += grain * 4; g += grain * 4; bl += grain * 5;
+      // Wasser: flach türkisgrün, tief dunkelblau, leichte Wellen
+      const dep = S.clamp(-e / 0.35, 0, 1), sh = 1 - Math.pow(1 - dep, 2);
+      r = 58 - 42 * sh; g = 118 - 70 * sh; bl = 132 - 50 * sh;
+      if (e > -0.02) { const k = (e + 0.02) / 0.02; r += 40 * k; g += 34 * k; bl += 18 * k; }
+      const wave = (n1 - 0.5) * 10 + grain * 4;
+      r += wave * 0.6; g += wave * 0.8; bl += wave;
     } else {
       const bio = S.biomeOf(e, m, tt, f > 0.5 ? 1 : 0, ir > 0.5 ? 1 : 0);
       const col = S.BIOME_RGB[bio];
       r = col[0]; g = col[1]; bl = col[2];
-      if (bio === B.GRASS || bio === B.STEPPE || bio === B.SAVANNA) {
+      const open = bio === B.GRASS || bio === B.STEPPE || bio === B.SAVANNA;
+      if (open) {
         const lush = S.clamp((m - 0.35) * 1.6, -0.4, 0.5);
-        r -= lush * 26; g += lush * 10; bl -= lush * 12;
+        r -= lush * 22; g += lush * 8; bl -= lush * 10;
+        // Wiesen und Weiden wechseln großflächig
+        const meadow = (n2 - 0.5) * 18;
+        r += meadow * 0.6; g += meadow; bl += meadow * 0.3;
+        // Äcker: rechteckige Parzellen, je Gegend anders ausgerichtet
+        const farm = S.clamp((m - 0.22) * 3, 0, 1) * (1 - S.clamp((e - 0.32) * 4, 0, 1)) * S.clamp((0.62 - f) * 3, 0, 1) * (bio === B.SAVANNA ? 0.4 : 1);
+        if (farm > 0.02 && tt > 0.22) {
+          const sz = PX * 1.7;
+          const ang = Math.floor(S.hash2(Math.floor(qx / (PX * 22)), Math.floor(qy / (PX * 22)), 91) * 4) * 0.4;
+          const ca = Math.cos(ang), sa = Math.sin(ang);
+          const fv = (-qx * sa + qy * ca) / (sz * 0.6), cv = Math.floor(fv);
+          const fu = (qx * ca + qy * sa) / (sz * (0.7 + S.hash2(cv, 7, 97) * 1.6)) + S.hash2(cv, 3, 95) * 3;
+          const cu = Math.floor(fu);
+          const F = FIELDS[Math.floor(S.hash2(cu, cv, 93) * FIELDS.length)];
+          const k = 0.45 * farm;
+          r += (F[0] - r) * k; g += (F[1] - g) * k; bl += (F[2] - bl) * k;
+          const du = fu - cu, dv = fv - cv;
+          if (Math.min(du, 1 - du) < 0.08 || Math.min(dv, 1 - dv) < 0.1) { r *= 1 - 0.18 * farm; g *= 1 - 0.1 * farm; bl *= 1 - 0.2 * farm; }
+        }
+      } else if (bio === B.FOREST || bio === B.JUNGLE || bio === B.TAIGA) {
+        // Kronendach: helle Wipfel, dunkle Lücken
+        const crown = S.hash2(Math.floor(qx / 1.5), Math.floor(qy / 1.5), 17) - 0.5;
+        const k = crown * 26 + (n1 - 0.5) * 22;
+        r += k * 0.7; g += k; bl += k * 0.6;
+      } else if (bio === B.MOUNTAIN || bio === B.HILLS) {
+        // Fels: Streifen und Geröll
+        const rock = (S.hash2(Math.floor(qx / 2), Math.floor(qy / 3), 19) - 0.5) * 18 + (n2 - 0.5) * 20;
+        r += rock; g += rock; bl += rock * 0.9;
+      } else if (bio === B.DESERT) {
+        const dune = Math.sin((qx * 0.8 + qy * 0.35) / PX + n1 * 6) * 8;
+        r += dune; g += dune * 0.85; bl += dune * 0.6;
       }
-      if (bio === B.MOUNTAIN && e > 1.0) { r = 236; g = 240; bl = 244; }
-      const sh = S.clamp((dx + dy) * 150, -38, 38) + (e > 0.3 ? (e - 0.3) * 18 : 0);
-      r += sh; g += sh; bl += sh * 0.9;
-      r += grain * 9; g += grain * 9; bl += grain * 7;
+      // Schnee auf hohen Gipfeln, weicher Übergang
+      const snow = S.clamp((e - 0.95) * 6, 0, 1) + S.clamp((0.18 - (tt - Math.max(0, e - 0.4) * 0.5)) * 6, 0, 1) * (e > 0.6 ? 1 : 0);
+      if (snow > 0) { const k = Math.min(1, snow); r += (238 - r) * k; g += (242 - g) * k; bl += (246 - bl) * k; }
+      // Relief: Licht von Nordwesten, stärker im Gebirge
+      const relief = e > 0.45 ? 1.6 : 1;
+      const sh = S.clamp(-(dx + dy) * 260 * relief, -60, 60);
+      r += sh; g += sh; bl += sh * 0.92;
+      r += grain * 7; g += grain * 7; bl += grain * 6;
     }
     _col[0] = r; _col[1] = g; _col[2] = bl;
     return _col;
@@ -433,7 +476,8 @@
         const n = nz(x * 0.04, y * 0.04);
         if (!land) {
           const dep = S.clamp(World.distLandKm(lon, lat) / 300, 0, 1);
-          r = 62 - 40 * dep; g = 134 - 72 * dep; b = 176 - 68 * dep;
+          const sh = 1 - Math.pow(1 - dep, 2);
+          r = 52 - 36 * sh + (n - 0.5) * 6; g = 112 - 64 * sh + (n - 0.5) * 8; b = 130 - 48 * sh + (n - 0.5) * 8;
         } else {
           const dsk = World.distSeaKm(lon, lat);
           const m = S.clamp(0.25 + n * 0.55 - dry + wet + Math.max(0, 1 - dsk / 500) * 0.18 - Math.min(1, dsk / 1600) * 0.22, 0, 1);
@@ -470,7 +514,7 @@
   }
 
   // ---------------- Boden ----------------
-  const GROUND = { historisch: '#c9bca2', modern: '#b4b9be', garten: '#a9c785', industrie: '#a2978a', mediterran: '#e6d9bd' };
+  const GROUND = { historisch: '#a9a396', modern: '#a2a6a8', garten: '#8ea86a', industrie: '#958f84', mediterran: '#cdbfa2' };
 
   function drawGround(c, G, x, y) {
     const t = G.t, id = y * G.W + x, X = x * TS, Y = y * TS;
@@ -527,9 +571,24 @@
     const b = t.bld[id];
     if (S.isUrban(b) || (t.road[id] && t.city[id])) {
       const city = G.cities[t.city[id] - 1];
-      c.fillStyle = city ? GROUND[city.style] : '#b9b4aa';
+      c.fillStyle = city ? GROUND[city.style] : '#a6a196';
       c.fillRect(X, Y, TS, TS);
-      if (city && city.style === 'garten' && b === U.R) { c.fillStyle = '#93bd6e'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2); }
+      // Höfe und Gärten zwischen den Häusern, je nach Dichte
+      const lv = t.lvl[id] || 1, h = S.hash2(x, y, 23);
+      if (b === U.R && lv <= 3) {
+        c.fillStyle = lv === 1 ? '#7f9f5c' : lv === 2 ? '#86a062' : '#8c9d6a';
+        const m = lv === 1 ? 1 : lv === 2 ? 3 : 6;
+        c.fillRect(X + m, Y + m, TS - 2 * m, TS - 2 * m);
+        c.fillStyle = 'rgba(60,80,40,0.25)';
+        c.fillRect(X + m + h * 6, Y + m + 2, 3, TS - 2 * m - 4);
+      } else if (b === U.C || b === U.I || lv >= 4) {
+        c.fillStyle = 'rgba(70,72,74,0.18)'; c.fillRect(X + 2, Y + 2, TS - 4, TS - 4);
+      }
+      if (!b && t.road[id]) {
+        // Straßenzüge: Grünstreifen, Bäume und Gehwege neben der Fahrbahn
+        c.fillStyle = '#86996a'; c.fillRect(X, Y, TS, TS);
+        c.fillStyle = 'rgba(160,156,146,0.55)'; c.fillRect(X + 6, Y + 6, TS - 12, TS - 12);
+      }
     }
   }
 
@@ -563,7 +622,7 @@
     if (r & 1) {
       const links = linkTargets(G, x, y, 1);
       const city = t.city[id] > 0;
-      const passes = water ? [['#6b5a48', 9], ['#a08a6c', 7]] : city ? [['#6f6c66', 8], ['#8f8c86', 6]] : [['#5d5850', 7], ['#9c968a', 5]];
+      const passes = water ? [['#5a4c3e', 9], ['#8a7a64', 7]] : city ? [['#3c3e40', 8], ['#56585b', 6.4]] : [['#3f3f3c', 7], ['#626360', 5.2]];
       for (const [col, w] of passes) {
         c.strokeStyle = col; c.lineWidth = w;
         c.beginPath();
@@ -575,7 +634,7 @@
         c.stroke();
       }
       if (!city && !water && links.length === 2) {
-        c.strokeStyle = 'rgba(240,226,160,0.7)'; c.lineWidth = 0.8; c.setLineDash([2.5, 3]);
+        c.strokeStyle = 'rgba(235,235,225,0.7)'; c.lineWidth = 0.7; c.setLineDash([2.5, 3]);
         c.beginPath();
         for (const [ox, oy] of links) { c.moveTo(cx, cy); c.lineTo(cx + ox * TS * 0.5, cy + oy * TS * 0.5); }
         c.stroke(); c.setLineDash([]);
@@ -620,14 +679,12 @@
 
   // ---------------- Grundformen für Gebäude ----------------
   function shadow(c, x, y, w, d, h) {
-    c.fillStyle = 'rgba(20,24,30,0.22)';
+    // Sonne aus Nordwesten: Schatten fällt nach Südosten
+    const ox = h * 0.42 + 0.8, oy = h * 0.2 + 0.6;
+    c.fillStyle = 'rgba(14,18,22,0.3)';
     c.beginPath();
-    c.moveTo(x + w, y + d);
-    c.lineTo(x + w + h * 0.45, y + d - h * 0.15);
-    c.lineTo(x + w + h * 0.45, y - h * 0.15);
-    c.lineTo(x + w, y);
-    c.closePath();
-    c.fill();
+    c.moveTo(x + w, y); c.lineTo(x + w + ox, y + oy); c.lineTo(x + w + ox, y + d + oy); c.lineTo(x + ox, y + d + oy); c.lineTo(x, y + d); c.lineTo(x + w, y + d);
+    c.closePath(); c.fill();
   }
   /** Quader in Schrägansicht: Grundfläche (x,y,w,d), Höhe h */
   function box(c, x, y, w, d, h, wall, roof, opt) {
@@ -635,6 +692,9 @@
     shadow(c, x, y, w, d, h);
     c.fillStyle = wall;
     c.fillRect(x, y + d - h, w, h);
+    // Wand: unten dunkler (Umgebungsverdeckung), rechte Kante im Schatten
+    c.fillStyle = 'rgba(0,0,0,0.16)'; c.fillRect(x, y + d - h * 0.35, w, h * 0.35);
+    c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(x + w - Math.min(2, w * 0.2), y + d - h, Math.min(2, w * 0.2), h);
     if (opt.win && h > 5) {
       c.fillStyle = opt.win;
       const rows = Math.floor((h - 2) / 3.2), cols = Math.max(1, Math.floor((w - 2) / 3));
@@ -652,32 +712,68 @@
     } else {
       c.fillStyle = roof;
       c.fillRect(x, y - h, w, d);
-      c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 0.6;
+      c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(x, y - h, w, Math.min(1.2, d * 0.2));
+      c.strokeStyle = 'rgba(0,0,0,0.22)'; c.lineWidth = 0.6;
       c.strokeRect(x + 0.3, y - h + 0.3, w - 0.6, d - 0.6);
     }
   }
-  function tree(c, x, y, r, kind) {
-    c.fillStyle = 'rgba(20,30,20,0.25)';
-    c.beginPath(); c.ellipse(x + r * 0.5, y + r * 0.6, r * 0.9, r * 0.45, 0, 0, Math.PI * 2); c.fill();
+  // Bäume als vorgezeichnete Bilder: schattierte Kronen, Licht von Nordwesten
+  const treeCache = new Map();
+  function treeSprite(kind, v) {
+    const key = kind + v;
+    let e = treeCache.get(key);
+    if (e) return e;
+    const k = 4, Wd = 16, Hd = 22;
+    const cv = document.createElement('canvas');
+    cv.width = Wd * k; cv.height = Hd * k;
+    const c = cv.getContext('2d');
+    c.scale(k, k);
+    const rnd = S.rng(v * 31 + kind.length * 7);
+    const x = Wd / 2, y = Hd - 4;
     if (kind === 'conifer') {
-      c.fillStyle = '#2c5640';
-      c.beginPath(); c.moveTo(x, y - r * 2); c.lineTo(x + r, y + r * 0.4); c.lineTo(x - r, y + r * 0.4); c.closePath(); c.fill();
-      c.fillStyle = '#3d7056';
-      c.beginPath(); c.moveTo(x, y - r * 2); c.lineTo(x - r, y + r * 0.4); c.lineTo(x - r * 0.1, y + r * 0.4); c.closePath(); c.fill();
+      c.fillStyle = '#4a3a28'; c.fillRect(x - 0.5, y - 2, 1, 3);
+      const base = [[38, 70, 52], [32, 62, 46], [44, 78, 58]][v % 3];
+      for (let i = 0; i < 4; i++) {
+        const w = 5.6 - i * 1.1, top = y - 3 - i * 3.2, h = 5.2;
+        const g = c.createLinearGradient(x - w, 0, x + w, 0);
+        g.addColorStop(0, 'rgb(' + base.map(q => q + 26).join(',') + ')'); g.addColorStop(1, 'rgb(' + base.map(q => q - 14).join(',') + ')');
+        c.fillStyle = g;
+        c.beginPath(); c.moveTo(x, top - h); c.lineTo(x + w, top + 1); c.quadraticCurveTo(x, top + 2, x - w, top + 1); c.closePath(); c.fill();
+      }
     } else if (kind === 'palm') {
-      c.strokeStyle = '#7a6040'; c.lineWidth = 1.2;
-      c.beginPath(); c.moveTo(x, y + r * 0.4); c.lineTo(x + 1, y - r * 1.4); c.stroke();
-      c.fillStyle = '#3f8a3e';
-      for (let k = 0; k < 5; k++) {
-        const a = k / 5 * Math.PI * 2;
-        c.beginPath(); c.ellipse(x + 1 + Math.cos(a) * r * 0.7, y - r * 1.4 + Math.sin(a) * r * 0.35, r * 0.7, r * 0.25, a, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#7d6444'; c.lineWidth = 1.1;
+      c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 1.5, y - 6, x + 1, y - 12); c.stroke();
+      for (let i = 0; i < 7; i++) {
+        const a = i / 7 * Math.PI * 2;
+        c.strokeStyle = i % 2 ? '#3f7a3a' : '#2f6a30'; c.lineWidth = 1.4;
+        c.beginPath(); c.moveTo(x + 1, y - 12); c.quadraticCurveTo(x + 1 + Math.cos(a) * 3, y - 14 + Math.sin(a) * 1.5, x + 1 + Math.cos(a) * 6, y - 11 + Math.sin(a) * 3); c.stroke();
       }
     } else {
-      const dark = kind === 'jungle' ? '#1d6136' : '#3b7232';
-      const lite = kind === 'jungle' ? '#2f8547' : '#5a9446';
-      dot(c, x, y - r * 0.6, r, dark);
-      dot(c, x - r * 0.3, y - r * 0.9, r * 0.55, lite);
+      const jungle = kind === 'jungle';
+      const base = jungle ? [[30, 82, 40], [38, 92, 44], [26, 72, 36]][v % 3] : [[62, 98, 46], [74, 108, 50], [56, 88, 44], [86, 112, 54]][v % 4];
+      c.fillStyle = '#4b3a28'; c.fillRect(x - 0.6, y - 4, 1.2, 4.5);
+      const blobs = 5;
+      for (let i = 0; i < blobs; i++) {
+        const bx = x + (rnd() - 0.5) * 6, by = y - 8 + (rnd() - 0.5) * 5, br = 2.6 + rnd() * 2;
+        const g = c.createRadialGradient(bx - br * 0.4, by - br * 0.5, br * 0.1, bx, by, br);
+        g.addColorStop(0, 'rgb(' + base.map(q => q + 46).join(',') + ')');
+        g.addColorStop(0.55, 'rgb(' + base.join(',') + ')');
+        g.addColorStop(1, 'rgb(' + base.map(q => q - 22).join(',') + ')');
+        c.fillStyle = g; c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.fill();
+      }
     }
+    e = { cv, w: Wd, h: Hd };
+    treeCache.set(key, e);
+    return e;
+  }
+  function tree(c, x, y, r, kind) {
+    const v = Math.floor(S.hash2(Math.round(x * 3), Math.round(y * 3), 5) * 6);
+    const sc = r / 3.8;
+    // Schlagschatten nach Südosten
+    c.fillStyle = 'rgba(16,26,14,0.3)';
+    c.beginPath(); c.ellipse(x + r * 0.9, y + r * 0.35, r * 1.15, r * 0.5, 0.3, 0, Math.PI * 2); c.fill();
+    const e = treeSprite(kind, v);
+    c.drawImage(e.cv, x - e.w / 2 * sc, y - (e.h - 4) * sc, e.w * sc, e.h * sc);
   }
   S.drawTree = tree;
 
@@ -695,22 +791,18 @@
     const foreign = false;
     if (t.forest[id] && t.elev[id] >= 0) {
       const kind = bio === B.TAIGA ? 'conifer' : bio === B.JUNGLE ? 'jungle' : 'leaf';
-      const n = kind === 'jungle' ? 4 : 5;
+      const n = kind === 'jungle' ? 5 : 6;
       for (let k = 0; k < n; k++) {
         const hx = S.hash2(x * 7 + k, y * 13, 77), hy = S.hash2(x * 5, y * 11 + k, 78);
         tree(c, X + 4 + hx * (TS - 8), Y + 6 + hy * (TS - 8), kind === 'jungle' ? 4.6 : 3.6 + hx, kind);
       }
     } else if (t.elev[id] >= S.MOUNTAIN_E) {
-      const h = 9 + (t.elev[id] - S.MOUNTAIN_E) * 30 + S.hash2(x, y, 3) * 5;
-      const px = X + TS / 2 + (S.hash2(x, y, 4) - 0.5) * 6, py = Y + TS * 0.8;
-      c.fillStyle = '#7d7466';
-      c.beginPath(); c.moveTo(px - 11, py); c.lineTo(px, py - h); c.lineTo(px + 11, py); c.closePath(); c.fill();
-      c.fillStyle = '#a49a8a';
-      c.beginPath(); c.moveTo(px - 11, py); c.lineTo(px, py - h); c.lineTo(px - 1, py); c.closePath(); c.fill();
-      const tt = t.temp[id] - (t.elev[id] - 0.4) * 0.5;
-      if (tt < 0.35 || t.elev[id] > 0.95) {
-        c.fillStyle = '#f4f7f9';
-        c.beginPath(); c.moveTo(px - 4, py - h * 0.62); c.lineTo(px, py - h); c.lineTo(px + 4, py - h * 0.62); c.lineTo(px + 1, py - h * 0.68); c.closePath(); c.fill();
+      // Fels und Geröll; die Berge selbst zeigt das Relief
+      for (let k = 0; k < 3; k++) {
+        const hx = X + 4 + S.hash2(x * 3 + k, y, 3) * (TS - 8), hy = Y + 6 + S.hash2(x, y * 3 + k, 4) * (TS - 10), rr = 1.6 + S.hash2(x + k, y + k, 9) * 2.4;
+        c.fillStyle = 'rgba(30,26,22,0.25)'; c.beginPath(); c.ellipse(hx + rr * 0.6, hy + rr * 0.4, rr * 1.1, rr * 0.55, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#8d8579'; c.beginPath(); c.moveTo(hx - rr, hy + rr * 0.4); c.lineTo(hx - rr * 0.3, hy - rr); c.lineTo(hx + rr, hy - rr * 0.2); c.lineTo(hx + rr * 0.8, hy + rr * 0.5); c.closePath(); c.fill();
+        c.fillStyle = '#b3aa9c'; c.beginPath(); c.moveTo(hx - rr, hy + rr * 0.4); c.lineTo(hx - rr * 0.3, hy - rr); c.lineTo(hx + rr * 0.1, hy); c.closePath(); c.fill();
       }
     } else if ((bio === B.SAVANNA || bio === B.DESERT) && S.hash2(x, y, 41) < 0.12 && t.elev[id] >= 0) {
       tree(c, X + 8 + S.hash2(x, y, 42) * 8, Y + 14, 2.8, bio === B.DESERT ? 'palm' : 'leaf');
@@ -1455,64 +1547,12 @@
     if (!G.mil || R.flatA < 0.5) return null;
     let best = null, bd = 24;
     for (const u of G.mil.units) {
-      const [x, y] = R.gToScreen(u.x, u.y);
-      const d = Math.hypot(x - sx, y - sy);
+      const p = R.unitPos && R.unitPos.get(u.id);
+      const [x, y] = p ? [p.x, p.y] : R.gToScreen(u.x, u.y);
+      const d = Math.hypot(x - sx, y - 6 - sy);   // Figur steht über ihrem Bodenpunkt
       if (d < bd) { bd = d; best = u; }
     }
     return best;
-  };
-
-  /**
-   * Bild einer Einheit (Seitenansicht, Blick nach rechts; face = -1 spiegelt).
-   * s = Breite in Pixeln, ink = Zeichenfarbe, bg = Grundfarbe des Spielsteins.
-   */
-  S.drawUnitPic = function (c, type, cx, cy, s, ink, bg, face) {
-    c.save();
-    c.translate(cx, cy);
-    c.scale((face < 0 ? -1 : 1) * s / 24, s / 24);
-    c.fillStyle = ink; c.strokeStyle = ink;
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    if (type === 'inf') {
-      // Soldat mit Helm und Gewehr
-      c.lineWidth = 1.7;
-      c.beginPath(); c.moveTo(-0.2, 2.6); c.lineTo(-2.6, 7.4); c.moveTo(0.8, 2.6); c.lineTo(2.9, 7.4); c.stroke();  // Beine
-      c.beginPath(); c.moveTo(-3.6, 7.4); c.lineTo(-1.8, 7.4); c.moveTo(2.5, 7.4); c.lineTo(4.2, 7.4); c.stroke();  // Stiefel
-      roundRect(c, -1.9, -2.2, 3.8, 5.3, 1.2); c.fill();                                                          // Rumpf
-      c.beginPath(); c.arc(0.3, -3.7, 1.55, 0, Math.PI * 2); c.fill();                                              // Kopf
-      c.beginPath(); c.arc(0.1, -4.6, 2.5, Math.PI, 0); c.closePath(); c.fill();                                    // Helm
-      c.lineWidth = 1; c.beginPath(); c.moveTo(-2.9, -4.5); c.lineTo(3.1, -4.5); c.stroke();                        // Helmrand
-      c.lineWidth = 1.3; c.beginPath(); c.moveTo(-3.2, 2.8); c.lineTo(7.2, -3.6); c.stroke();                       // Gewehr
-      c.lineWidth = 2; c.beginPath(); c.moveTo(-3.4, 3); c.lineTo(-1.6, 1.9); c.stroke();                           // Kolben
-      c.lineWidth = 1.2; c.beginPath(); c.moveTo(0.6, -1.2); c.lineTo(2.6, 0.6); c.stroke();                        // Arm
-    } else if (type === 'tank') {
-      // Panzer: Ketten mit Laufrollen, Wanne, Turm, Kanone
-      roundRect(c, -10.5, 1.2, 21, 5.6, 2.8); c.fill();
-      c.fillStyle = bg;
-      for (let i = -2; i <= 2; i++) { c.beginPath(); c.arc(i * 3.9, 4, 1.35, 0, Math.PI * 2); c.fill(); }
-      c.fillStyle = ink;
-      c.beginPath(); c.moveTo(-10.5, 1.6); c.lineTo(-9.4, -1.6); c.lineTo(8.6, -1.6); c.lineTo(11.2, 1.6); c.closePath(); c.fill();
-      c.beginPath(); c.moveTo(-5.5, -1.6); c.lineTo(-4.4, -5.4); c.lineTo(2.6, -5.4); c.lineTo(4.6, -1.6); c.closePath(); c.fill();
-      c.fillRect(3, -4.4, 9.4, 1.5);
-      c.fillRect(11.4, -4.7, 1.4, 2.1);
-    } else {
-      // Artillerie: Feldgeschütz mit Lafette, Rad und langem Rohr
-      c.lineWidth = 1.9;
-      c.beginPath(); c.moveTo(0, 3.2); c.lineTo(-11, 7.2); c.stroke();                                              // Lafette
-      c.lineWidth = 1.4; c.beginPath(); c.moveTo(-11.4, 5.6); c.lineTo(-10.6, 8.4); c.stroke();                     // Sporn
-      c.save(); c.translate(0, 0.6); c.rotate(-0.5);
-      c.fillRect(-4, -1.3, 4.6, 2.6);                                                                               // Verschluss
-      c.fillRect(0, -0.85, 13, 1.7);                                                                                // Rohr
-      c.fillRect(12, -1.2, 1.6, 2.4);                                                                               // Mündung
-      c.restore();
-      c.beginPath(); c.moveTo(-1.6, -2.4); c.lineTo(2.2, -4.2); c.lineTo(3, 1.6); c.lineTo(-1, 2.2); c.closePath(); c.fill(); // Schild
-      c.fillStyle = bg; c.beginPath(); c.arc(0.4, 4.2, 3.7, 0, Math.PI * 2); c.fill();
-      c.lineWidth = 1.5; c.beginPath(); c.arc(0.4, 4.2, 3.5, 0, Math.PI * 2); c.stroke();                          // Rad
-      c.lineWidth = 0.8; c.beginPath();
-      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; c.moveTo(0.4 + Math.cos(a) * 3.3, 4.2 + Math.sin(a) * 3.3); c.lineTo(0.4 - Math.cos(a) * 3.3, 4.2 - Math.sin(a) * 3.3); }
-      c.stroke();
-      c.fillStyle = ink; c.beginPath(); c.arc(0.4, 4.2, 1, 0, Math.PI * 2); c.fill();                              // Nabe
-    }
-    c.restore();
   };
 
   /** Blickrichtung einer Einheit: Marschrichtung, sonst zum Gegner, sonst die letzte */
@@ -1552,35 +1592,64 @@
       c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.stroke();
     }
     c.setLineDash([]);
-    // Spielsteine (eigene zuletzt, damit sie oben liegen)
-    const list = G.mil.units.slice().sort((a, b) => (a.o === home) - (b.o === home));
-    for (const u of list) {
-      let [x, y] = R.gToScreen(u.x, u.y);
-      if (x < -30 || y < -30 || x > R.cw + 30 || y > R.ch + 30) continue;
-      const w = 34, h = 25;
-      const training = u.ready > now;
-      c.globalAlpha = (training ? 0.55 : 1) * R.flatA;
-      if (u.fight || u.under) {
-        c.fillStyle = 'rgba(230,60,40,' + (0.35 + 0.3 * Math.sin(T * 8)).toFixed(2) + ')';
-        c.beginPath(); c.arc(x, y, 23, 0, Math.PI * 2); c.fill();
+    // Figuren: von hinten nach vorn (weiter unten im Bild = davor)
+    S.Sprites.markOf = R.unitColor;
+    const dpr = R.dpr;
+    const sc = S.clamp(0.42 + R.ppt / 45, 0.5, 1.12);   // Größe wächst mit dem Zoom
+    // Bildschirmplätze: dicht stehende Einheiten weichen zu einer lockeren Formation aus
+    const pos = new Map(), vis = [];
+    for (const u of G.mil.units) {
+      const [x, y] = R.gToScreen(u.x, u.y);
+      if (x < -80 || y < -80 || x > R.cw + 80 || y > R.ch + 80) continue;
+      const p = { u, x, y, r: (u.type === 'inf' ? 13 : 23) * sc };
+      pos.set(u.id, p); vis.push(p);
+    }
+    for (let it = 0; it < 8; it++) {
+      for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+        const a = vis[i], b = vis[j];
+        let dx = b.x - a.x, dy = (b.y - a.y) * 1.6;
+        const d = Math.hypot(dx, dy), min = a.r + b.r;
+        if (d >= min) continue;
+        if (d < 0.01) { dx = Math.cos(a.u.id + b.u.id); dy = Math.sin(a.u.id + b.u.id); }
+        const k = (min - Math.max(d, 0.01)) / 2 / (Math.max(d, 0.01));
+        a.x -= dx * k * 0.5; b.x += dx * k * 0.5; a.y -= dy * k * 0.3; b.y += dy * k * 0.3;
       }
+    }
+    R.unitPos = pos;
+    vis.sort((a, b) => a.y - b.y);
+    for (const p of vis) {
+      const u = p.u;
+      let x = p.x, y = p.y;
+      const training = u.ready > now;
+      const engaged = u.fight || u.under, moving = u.path && !engaged && !training;
       const col = R.unitColor(u.o);
-      // marschierende Einheiten wippen leicht
-      if (u.path && !u.fight && !u.under && !training) y += Math.sin(T * 9 + u.id) * 1.2;
-      c.fillStyle = 'rgba(0,0,0,0.28)'; c.beginPath(); c.ellipse(x + 2, y + h / 2 + 2, w / 2 + 1, 4, 0, 0, Math.PI * 2); c.fill();
-      c.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(c, x - w / 2 + 2, y - h / 2 + 2, w, h, 6); c.fill();
-      c.fillStyle = col; roundRect(c, x - w / 2, y - h / 2, w, h, 6); c.fill();
-      const ink = u.o === home ? '#1b2531' : '#ffffff';
-      c.strokeStyle = u.o === home ? 'rgba(27,37,49,0.55)' : 'rgba(255,255,255,0.5)'; c.lineWidth = 1;
-      roundRect(c, x - w / 2 + 0.5, y - h / 2 + 0.5, w - 1, h - 1, 6); c.stroke();
-      S.drawUnitPic(c, u.type, x, y - 0.5, 27, ink, col, unitFace(u, byId));
-      // Stärke
-      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, y + h / 2 + 2, w, 4);
+      const face = unitFace(u, byId);
+      const gy = y + 9 * sc;                  // Bodenpunkt unter der Figur
+      c.globalAlpha = (training ? 0.6 : 1) * R.flatA;
+      // Bodenring in Landesfarbe (im Gefecht pulsierend rot)
+      const rx = (u.type === 'inf' ? 15 : 24) * sc, ry = (u.type === 'inf' ? 5 : 7) * sc;
+      c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(x + 2, gy + 1, rx, ry, 0, 0, Math.PI * 2); c.fill();
+      if (engaged) {
+        c.fillStyle = 'rgba(230,60,40,' + (0.25 + 0.2 * Math.sin(T * 8)).toFixed(2) + ')';
+        c.beginPath(); c.ellipse(x, gy, rx + 6, ry + 3, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.strokeStyle = col; c.lineWidth = sel.has(u.id) ? 3 : 2;
+      c.globalAlpha = (training ? 0.6 : 0.95) * R.flatA;
+      c.beginPath(); c.ellipse(x, gy, rx, ry, 0, 0, Math.PI * 2); c.stroke();
+      if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 1.6; c.beginPath(); c.ellipse(x, gy, rx + 4, ry + 2.5, 0, 0, Math.PI * 2); c.stroke(); }
+      c.globalAlpha = (training ? 0.6 : 1) * R.flatA;
+      // Figur
+      const pose = u.type === 'inf' ? (engaged ? 'aim' : moving ? 'walk' : 'stand') : moving ? 'walk' : 'stand';
+      const frame = moving ? Math.floor(T * (u.type === 'inf' ? 7 : 10) + u.id) % 4 : 0;
+      S.Sprites.draw(c, u.type, u.o, x, gy + (moving && u.type !== 'inf' ? Math.sin(T * 14 + u.id) * 0.4 : 0), face, pose, frame, sc, dpr);
+      // Stärke als schmaler Balken über der Figur
+      const top = gy - S.Sprites.height(u.type, sc) + 4 * sc;
+      const bw = (u.type === 'inf' ? 22 : 30) * sc;
+      c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(x - bw / 2, top - 6, bw, 3.5);
       c.fillStyle = u.hp > 60 ? '#5fbf7f' : u.hp > 30 ? '#f0b23a' : '#e5574e';
-      c.fillRect(x - w / 2, y + h / 2 + 2, w * Math.max(0, u.hp) / 100, 4);
-      if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; roundRect(c, x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 12, 8); c.stroke(); }
-      S.FX.unitDeco(c, u, x, y, w, h, T);
-      if (training) { c.fillStyle = '#fff'; c.font = '600 9px "Public Sans", system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('Ausbildung', x, y - h / 2 - 6); }
+      c.fillRect(x - bw / 2, top - 6, bw * Math.max(0, u.hp) / 100, 3.5);
+      if (sc > 0.7 || sel.has(u.id)) S.FX.unitDeco(c, u, x, (top + gy) / 2 - 2, bw + 10, gy - top + 6, T);
+      if (training) { c.fillStyle = '#fff'; c.font = '600 9px "Public Sans", system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('Ausbildung', x, top - 10); }
     }
     // Gefechte und Explosionen über den Spielsteinen
     c.globalAlpha = R.flatA;

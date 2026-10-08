@@ -29,6 +29,16 @@ Ab dann gehört das Land dir. Du bist für Infrastruktur, Wirtschaft, Energie, B
 | **Arbeitsmarkt** | Zonen, Betriebe | Zu wenige Jobs → Arbeitslosigkeit und Unmut. Zu wenige Menschen → Betriebe arbeiten nicht voll. |
 | **Infrastruktur** | Straßen, Brücken, Bahnstrecken | Gebäude ohne Straßenanschluss arbeiten nur mit 40 %. Städte ohne Verbindung zur Hauptstadt sind unzufrieden. Bahnanschluss lässt Städte schneller wachsen. |
 | **Dienste** | Universitäten, Krankenhäuser, Parks, Stadien, Wahrzeichen | Wirken im Umkreis. Das Bildungsniveau steigt langsam und hebt Löhne und Erträge. |
+| **Gesetze** | Wohnungsbau, Zuwanderung, Familienpolitik, Umweltauflagen, Wehrdienst, Rüstungsetat, Ausbildung, Kriegspropaganda, Soldatenfürsorge | Du regierst durch Entscheidungen statt Einzelbefehle. Jedes Gesetz hat mehrere Stufen mit Kosten und Wirkungen und lässt sich alle zwei Monate ändern (Tab „Gesetze“). |
+
+### 2.1a Städte wachsen von selbst
+- Jeden Spieltag wächst jede Stadt ein Stück: Geburten (Gesundheit, Familienpolitik), Zuzug (Zufriedenheit, Arbeit, Anbindung, Zuwanderungsgesetz) und Bauträger, die bei Wohnungsmangel und bei guten Aussichten neue Häuser, Läden und Betriebe errichten (Bauförderung und sozialer Wohnungsbau beschleunigen das).
+- Strommangel, Unzufriedenheit und fehlende Arbeit bremsen das Wachstum; das Stadt-Panel zeigt Wachstum pro Monat, Neubauten und die Gründe.
+
+### 2.1b Soldaten kommen aus der Bevölkerung
+- **Wehrfähige:** Wie viele Menschen dienen können, ergibt sich aus Bevölkerung × Wehrdienstgesetz (Berufsarmee 0,2 %, freiwillig 0,5 %, Wehrpflicht 1,5 %, Mobilmachung 4 %) × Dienstbereitschaft × Gesundheit. Die Bereitschaft steigt mit Zustimmung, Bedrohung (Verteidigungskrieg), Propaganda und guter Soldatenfürsorge und sinkt mit Kriegsmüdigkeit. Ohne genug Wehrfähige lassen sich keine Truppen ausbilden.
+- **Wirtschaft:** Soldaten und Wehrdienst fehlen dem Arbeitsmarkt; Kriegswirtschaft kostet Güter, Rüstung kostet Unterhalt.
+- **Kampfkraft eigener Truppen** = Ausrüstung (Rüstungsetat) × Ausbildung × Moral. Die Moral hängt an Zustimmung, Fürsorge, Propaganda, Bedrohung und Kriegsmüdigkeit.
 
 ### 2.2 Gestalten (Landschaft)
 
@@ -89,6 +99,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Stufenloser Zoom** vom Weltall bis zu einzelnen Häusern: 3D-Globus → flache Weltkarte mit Ländern → Landkarte mit Gelände, Städten und Straßen → Detailansicht (4-fach). Die Stufen blenden ineinander über, die Kamera ist für alle dieselbe. Neue Spiele beginnen mit einem Anflug aus dem All. Man kann frei über die Grenzen hinaus durch die ganze Welt scrollen; „Zu meinem Land“ fliegt zurück.
 
 ### Grafik
+- **Echte Figuren statt Spielsteine:** Infanterie ist ein Soldat mit Helm, Uniform, Gewehr und Rucksack, der beim Marschieren läuft und im Gefecht anlegt; Panzer mit Ketten, Laufrollen, Turm, Tarnanstrich und Hoheitszeichen; Geschütze mit Rädern, Schild, Lafette und Kanonier. Uniformen tragen realistische Farben (Oliv, Feldgrau, Khaki, Sand …), die Zugehörigkeit zeigt ein Ring am Boden in Landesfarbe. Nah beieinander stehende Truppen weichen auf dem Bildschirm zu einer Formation aus. Neue Einheitentypen tragen sich in `js/sprites.js` ein.
+- **Landschaft wie aus der Luft:** natürliche Farben, Äcker als Flickenteppich in wechselnder Ausrichtung, Kronendach im Wald, Fels und weiche Schneegrenzen im Gebirge, Dünen, Wasser von türkisem Flachwasser bis tiefblauer See, Relief mit Licht aus Nordwesten. Bäume sind schattierte Kronen mit Schlagschatten; Gebäude werfen Schatten nach Südosten, Straßen sind Asphalt, Wohnviertel haben Gärten und Grünstreifen.
 - **Gefechte** sind sichtbar: Infanterie feuert Leuchtspurgarben, Panzer schießen mit Mündungsfeuer und Einschlag, Artillerie schickt Granaten im Bogen mit Explosion und Druckwelle. Vernichtete Einheiten hinterlassen ein brennendes Wrack mit Rauchsäule.
 - **Frontlinien** zwischen dir und Kriegsgegnern glühen rot und laufen sichtbar entlang der Grenze.
 - **Einheiten** werfen Schatten, wippen auf dem Marsch und zeigen Sterne, Stellung, fehlenden Nachschub und Rückzug.
@@ -128,6 +140,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Erfahrung:** Kämpfen und Siege bringen bis zu drei Sterne (Erfahren, Veteran, Elite) und bis zu +25 % Kampfkraft.
 - **Nachschub:** Ohne eigenes Land in etwa 40 km Umkreis kämpft eine Einheit schwächer, marschiert langsamer und zehrt aus (rotes Ausrufezeichen).
 - **Flanke und Typen:** Jeder weitere Angreifer auf dasselbe Ziel bringt +15 % (bis +45 %). Panzer sind im offenen Gelände stark, in Wald, Bergen und Städten schwach; Infanterie lauert Panzern dort auf. Angeschlagene Ziele werden bevorzugt.
+- **Oberkommando:** Du legst je Krieg die Haltung fest – *Verteidigen* (bedrohte Städte besetzen, Eindringlinge stellen), *Front halten* (eingraben) oder *Angreifen* (an der Grenze sammeln, gemeinsam im Tempo der langsamsten Einheit auf die nächste feindliche Stadt vorrücken, Infanterie ins Zentrum). Ein Fünftel bleibt als Reserve in den bedrohtesten Städten. Eigene Befehle haben Vorrang; danach übernimmt das Oberkommando wieder.
+- **Feindliche Hauptstädte** haben eine Garnison, verteidigen sich verbissen und bekommen bei Bedrohung schneller Nachschub. Artillerie ist das Mittel gegen Städte und Stellungen.
 - **Rückzug:** Eigene Einheiten unter 22 % Stärke ziehen sich selbst in die nächste eigene Stadt zurück (im Militär-Panel abschaltbar).
 - **Bilder:** Jede Einheit zeigt ihr Bild (Soldat, Panzer, Geschütz) und blickt in Marschrichtung; darunter der Stärkebalken.
 - **Fronten:** Nur **Infanterie** gewinnt Gelände. Steht sie auf feindlichem Boden, wechselt alles im Umkreis von etwa 15 km den Besitzer (ausgewählte Infanterie zeigt den Kreis gestrichelt) – die Grenze wandert mit. Felder, die näher an einer feindlichen Einheit liegen, bleiben beim Gegner: Die Front liegt zwischen den Truppen. Stadtgebiete werden nicht über den Umkreis eingenommen.
@@ -166,6 +180,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
+| `js/sprites.js` | Einheiten als Figuren (Soldat, Panzer, Geschütz) – vorgezeichnet, gespiegelt, zwischengespeichert |
 | `js/effects.js` | Gefechtseffekte (Leuchtspur, Granaten, Explosionen, Wracks), Frontlinien, Wolken, Abzeichen der Einheiten |
 | `js/territory.js` | Verschobene Grenzen: eroberte und verlorene Gebiete auf Globus und Weltkarte |
 | `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |

@@ -31,7 +31,8 @@ python3 tools/build_single.py            # schreibt dist/souveraen.html
 | Gebäude, Stadt gründen, Abriss | Werkzeug wählen, Bauplatz antippen, „Bauen“ bestätigen |
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
-| Truppen führen | Einheit antippen, „+ Truppen ringsum“ für eine Gruppe, „Marschziel“, Ziel antippen |
+| Regieren | Tab „Gesetze“: Wohnungsbau, Zuwanderung, Familie, Umwelt, Wehrdienst, Rüstung, Ausbildung, Propaganda, Fürsorge |
+| Truppen führen | Militär-Panel: Haltung des Oberkommandos je Krieg (verteidigen, halten, angreifen) – oder selbst: Einheit antippen, „+ Truppen ringsum“, „Marschziel“, Ziel antippen |
 | Land erobern | mit Infanterie über die Grenze marschieren (Umkreis ~15 km); eine Stadt fällt, wenn Infanterie ihren Mittelpunkt erreicht. Eingeschlossenes Feindesland ohne feindliche Truppen fällt automatisch zu. Fällt die Hauptstadt des Gegners, kapituliert er, und du kannst das ganze Land annektieren. Erobertes Land ist danach normal bebaubar, auch mit neuen Städten; die neue Grenze zeigen Globus, Weltkarte und Landkarte |
 
 Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten). Die Welt läuft weiter, wenn die App geschlossen ist; beim Öffnen wird bis zu ein Jahr nachgerechnet und ein Lagebericht gezeigt. Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.

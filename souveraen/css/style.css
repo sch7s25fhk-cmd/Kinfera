@@ -397,3 +397,13 @@ button { font: inherit; color: inherit; }
 #tbDate { font-size: 12px; white-space: nowrap; }
 .speed button { padding: 7px 6px; }
 .tb-menu { padding: 6px 8px; }
+
+/* Gesetze */
+.law { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+.law:first-of-type { border-top: 0; }
+.law-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.law-head small { color: var(--muted); font-size: 12px; }
+.law p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; }
+.law .eff { color: var(--ink-2, #d9d2c3); font-weight: 600; font-size: 12.5px; }
+.chip[disabled] { opacity: .45; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--brass); font: inherit; text-decoration: underline; cursor: pointer; }

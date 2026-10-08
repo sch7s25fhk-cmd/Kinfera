@@ -191,6 +191,9 @@
     G.frac = (G.frac || 0) + dM;
     if (G.eco.last) G.eco.money += G.eco.last.net * dM;
     S.Mil.advance(G, dM * 720);
+    // Städte wachsen jeden Spieltag ein Stück
+    G.dayAcc = (G.dayAcc || 0) + dM;
+    while (G.dayAcc >= 1 / 30) { G.dayAcc -= 1 / 30; S.growCities(G, 1 / 30); }
     while (G.frac >= 1) {
       G.frac -= 1;
       S.tick(G);

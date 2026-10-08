@@ -541,7 +541,8 @@
         p[ny * W + nx] -= 0.025;
       }
     }
-    for (let i = 0; i < N; i++) t.poll[i] = S.clamp(t.poll[i] * 0.6 + S.clamp(p[i], 0, 1) * 0.4, 0, 1);
+    const pm = S.lawv(G, 'environment', 'poll', 1);
+    for (let i = 0; i < N; i++) t.poll[i] = S.clamp(t.poll[i] * 0.6 + S.clamp(p[i] * pm, 0, 1) * 0.4, 0, 1);
   }
 
   // ======================= Städte auswerten =======================
@@ -645,7 +646,10 @@
     for (const c of G.cities) { pop += c.pop; jobs += c.jobs; }
     for (const b of G.blds) b.occ = t.region[S.idx(G, b.x, b.y)] !== 1;
     for (const b of G.blds) if (!b.occ) jobs += S.BLD[b.b].jobs;
-    const workforce = pop * 0.5;
+    // Wehrdienst und Soldaten fehlen dem Arbeitsmarkt
+    const soldiers = S.Mil && G.mil ? S.Mil.inService(G) / (G.popScale || 1) : 0;
+    const workforce = Math.max(pop * 0.3, pop * 0.5 * (1 - S.lawv(G, 'conscription', 'work', 0)) - soldiers);
+    const ind = S.lawv(G, 'environment', 'ind', 1) * S.lawv(G, 'milbudget', 'ind', 1);
     const laborRatio = Math.min(1, workforce / Math.max(1, jobs));
     const employment = Math.min(1, jobs / Math.max(1, workforce));
     const strike = 1 - S.mod(G, 'strike');
@@ -655,7 +659,7 @@
     for (const c of G.cities) eDem += c.energy;
     const outs = G.blds.map(b => {
       const o = S.buildingOutput(G, b);
-      const eff = b.occ ? 0 : (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod;
+      const eff = b.occ ? 0 : (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod * (b.b >= 13 && b.b <= 15 ? ind : 1);
       if (!b.occ) { eDem += S.BLD[b.b].energy; eProd += o.energy * (b.conn ? 1 : 0.4); }
       return { o, eff, b };
     });
@@ -671,7 +675,7 @@
     }
     let cityGoods = 0, cityRawNeed = 0, goodsNeed = 0, commerce = 0;
     for (const c of G.cities) {
-      cityGoods += c.goodsProd * laborRatio * strike * (0.3 + 0.7 * last.energyRatio) * S.STYLES[c.style].gdp;
+      cityGoods += c.goodsProd * laborRatio * strike * (0.3 + 0.7 * last.energyRatio) * S.STYLES[c.style].gdp * ind;
       cityRawNeed += c.rawNeed; goodsNeed += c.goodsNeed;
       commerce += c.commerce * laborRatio * 0.006 * S.STYLES[c.style].gdp;
     }
@@ -730,8 +734,10 @@
     const other = Math.max(0, base), pensions = Math.max(0, -base);
     const military = S.Mil ? S.Mil.upkeep(G) : 0;
     const tribute = S.Mil ? S.Mil.tribute(G) : 0;
+    // Programme aus Gesetzen (Bauförderung, Familien, Propaganda ...)
+    const laws = S.LAWS.reduce((sum, l) => { const o = S.lawOpt(G, l.key); return sum + (o.cost || 0) * k + (o.flat || 0); }, 0);
     const income = incomeTax + corpTax + exports + tourism + other + tribute;
-    const expense = servicesSum + upkeep + imports + interest + pensions + military;
+    const expense = servicesSum + upkeep + imports + interest + pensions + military + laws;
     const net = income - expense;
     if (!G.continuous) eco.money += net; // sonst fließt das Geld laufend (siehe main.js)
     if (eco.money < -200) {
@@ -754,6 +760,8 @@
 
     // --- Zufriedenheit
     const unemp = 1 - employment;
+    const atWar = G.mil && Object.keys(G.mil.wars).length > 0;
+    const lawHappy = S.lawSum(G, 'happy') + (G.meta.gov === 'demokratie' ? S.lawSum(G, 'demHappy') : 0) + (atWar ? S.lawSum(G, 'warHappy') : 0);
     let happySum = 0;
     for (const c of G.cities) {
       const st = S.STYLES[c.style];
@@ -774,8 +782,9 @@
         'Natur & Parks': c.nature * 8 + Math.min(6, c.parks * 1.5),
         'Stadion & Wahrzeichen': Math.min(10, c.stad * 6 + c.monu * 4 * mon),
         'Verkehrsanbindung': (c.connected ? 0 : -6) + (c.rail ? 2 : 0),
-        'Wohnungsnot': -Math.max(0, c.pop / Math.max(1, c.cap) - 1) * 60,
+        'Wohnungsnot': -Math.max(0, c.pop / Math.max(1, c.cap) - 1) * 60 * S.lawv(G, 'housing', 'shortage', 1),
         'Krieg': S.Mil ? -S.Mil.weariness(G) : 0,
+        'Gesetze': lawHappy,
         'Ereignisse': S.mod(G, 'happy')
       };
       let h = 0;
@@ -788,21 +797,10 @@
     const approvalT = pop > 0 ? happySum / pop : 50;
     eco.approval = eco.approval * 0.7 + approvalT * 0.3;
 
-    // --- Bevölkerung und Wachstum
-    const rnd = Math.random;
+    // --- Bevölkerung und Wachstum (im Echtzeitspiel täglich über S.growCities, sonst hier monatlich)
+    eco.last = Object.assign(eco.last || {}, { employment, foodShort, energyRatio });
+    if (!G.continuous) S.growCities(G, 1);
     for (const c of G.cities) {
-      const attract = (c.happy - 55) / 45 + (employment - 0.92) * 3 + (c.connected ? 0.1 : -0.4) + (c.rail ? 0.15 : 0) + Math.min(1, c.airport) * 0.15;
-      const natural = 0.0009 + 0.0009 * c.health - Math.min(1, foodShort) * 0.01;
-      const young = c.isNew && G.month - c.founded < 48 && c.happy > 40 ? 0.06 : 0;
-      const migr = 0.0028 * S.clamp(attract, -1.5, 1.5) + S.mod(G, 'immig') + young;
-      c.pop = Math.max(50, c.pop * (1 + natural + migr));
-      if (c.pop > c.cap * 1.06) c.pop = c.pop * 0.97 + c.cap * 1.06 * 0.03;
-      const free = c.cap * 0.88 - c.pop;
-      if (free < 0 && c.happy > 25) {
-        const avgCap = c.cap / Math.max(1, c.nR) || 300;
-        const steps = S.clamp(Math.ceil(-free / avgCap), 1, 3);
-        for (let s = 0; s < steps; s++) S.growStep(G, c, rnd);
-      }
       c.hist.push(Math.round(c.pop));
       if (c.hist.length > 120) c.hist.shift();
     }
@@ -812,7 +810,7 @@
     eco.last = {
       pop, jobs, workforce, employment, laborRatio, energyRatio, eProd, eDem,
       food, foodNeed, raw, rawUse, goods, goodsNeed, rawRatio: Math.min(1, rawRatio),
-      exports, imports, incomeTax, corpTax, tourism, other, pensions, services, upkeep, interest, income, expense, net, military, tribute,
+      exports, imports, incomeTax, corpTax, tourism, other, pensions, services, upkeep, interest, income, expense, net, military, tribute, laws, soldiers,
       tradeMul, gdp, foodShort, harbors, airports, roadTiles, railTiles
     };
     G.stats.push({ m: G.month, money: Math.round(eco.money), pop: Math.round(pop * G.popScale), app: Math.round(eco.approval), net: Math.round(net), gdp: Math.round(gdp) });
@@ -825,6 +823,42 @@
     politics(G);
     S.checkAchievements(G);
     if (!G.pendingEvent && G.month > 4 && Math.random() < 0.07) S.rollEvent(G);
+  };
+
+  /**
+   * Städte wachsen von selbst: Geburten, Zuzug je nach Lebensqualität und Gesetzen, und Bauträger bauen,
+   * wenn es eng wird oder die Aussichten gut sind. frac = Anteil eines Monats (1/30 = ein Spieltag).
+   */
+  S.growCities = function (G, frac) {
+    const L = G.eco.last;
+    if (!L) return;
+    const employment = L.employment === undefined ? 1 : L.employment, foodShort = L.foodShort || 0;
+    const energyOk = L.energyRatio === undefined || L.energyRatio > 0.85;
+    const natMul = S.lawv(G, 'family', 'natural', 1), lawMigr = S.lawv(G, 'immigration', 'migr', 0), build = S.lawv(G, 'housing', 'build', 1);
+    const rnd = Math.random;
+    for (const c of G.cities) {
+      if (!c.cap && !c.tiles) continue;
+      const attract = (c.happy - 55) / 45 + (employment - 0.92) * 3 + (c.connected ? 0.1 : -0.4) + (c.rail ? 0.15 : 0) + Math.min(1, c.airport || 0) * 0.15;
+      const natural = (0.0009 + 0.0009 * (c.health || 0.6)) * natMul - Math.min(1, foodShort) * 0.01;
+      const young = c.isNew && G.month - c.founded < 48 && c.happy > 40 ? 0.06 : 0;
+      const migr = 0.007 * S.clamp(attract, -1.5, 1.5) + S.mod(G, 'immig') + lawMigr * (attract > -0.3 ? 1 : 0.3) + young;
+      c.growth = natural + migr;
+      c.attract = attract;
+      c.pop = Math.max(50, c.pop * (1 + c.growth * frac));
+      if (c.pop > c.cap * 1.06) c.pop -= (c.pop - c.cap * 1.06) * Math.min(1, 0.03 * frac * 30);
+      // Bauen: bei Wohnungsmangel sowieso, bei guten Aussichten auch vorausschauend
+      const avgCap = c.cap / Math.max(1, c.nR) || 300;
+      let perMonth = 0;
+      const free = c.cap * 0.88 - c.pop;
+      if (free < 0 && c.happy > 25) perMonth += Math.min(3, -free / avgCap) * 2;
+      if (attract > 0.1 && energyOk && c.happy > 45) perMonth += 1.8 * Math.min(1.2, attract) * (0.6 + Math.sqrt(c.tiles || 1) / 12) * build;
+      c.buildRate = perMonth;
+      let steps = perMonth * frac;
+      while (steps > 0) {
+        if (steps >= 1 || rnd() < steps) S.growStep(G, c, rnd);
+        steps -= 1;
+      }
+    }
   };
 
   /** Bringt den Startzustand ins Gleichgewicht: Strom, Arbeitsplätze und Haushalt */

@@ -63,13 +63,13 @@
     // Sterne
     const rnd = S.rng(7);
     WM.stars = Array.from({ length: 160 }, () => [rnd(), rnd(), rnd() * 1.2 + 0.3, rnd() * 0.6 + 0.2]);
-    bindInput(canvas);
+    if (!opts.noInput) bindInput(canvas);
     WM.resize();
   };
 
   WM.resize = function () {
     const c = WM.canvas, r = c.getBoundingClientRect();
-    WM.dpr = Math.min(3, window.devicePixelRatio || 1);
+    WM.dpr = Math.min(opts.maxDpr || 3, window.devicePixelRatio || 1);
     c.width = Math.max(1, Math.round(r.width * WM.dpr)); c.height = Math.max(1, Math.round(r.height * WM.dpr));
     WM.cw = r.width; WM.ch = r.height;
     WM.baseR = Math.min(WM.cw, WM.ch * 0.8) * 0.44;
@@ -376,6 +376,8 @@
     WM.idle = false;
   };
   WM.itemById = (id) => WM.items.find(it => it.c.id === id);
+  WM.unproject = (sx, sy) => unproject(sx, sy);
+  WM.hit = (sx, sy) => hit(sx, sy);
 
   return WM;
   };

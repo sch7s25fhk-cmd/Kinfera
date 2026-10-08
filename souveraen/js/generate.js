@@ -128,7 +128,7 @@
   };
   S.TILE_TYPES = { region: Uint8Array, elev: Float32Array, moist: Float32Array, temp: Float32Array, forest: Uint8Array,
     river: Uint8Array, rdir: Int8Array, flow: Uint16Array, irrig: Uint8Array, res: Uint8Array, road: Uint8Array,
-    bld: Uint8Array, lvl: Uint8Array, city: Uint16Array, zone: Uint8Array, poll: Float32Array, biome: Uint8Array };
+    bld: Uint8Array, lvl: Uint8Array, city: Uint16Array, zone: Uint8Array, poll: Float32Array, biome: Uint8Array, owner: Uint16Array };
 
   S.updateBiome = function (G, i) {
     const t = G.t;
@@ -143,76 +143,30 @@
     const { rings, box } = S.selectRings(country);
     const midLat = (box.y0 + box.y1) / 2;
     const k = Math.cos(midLat * Math.PI / 180);
-    let wDeg = box.x1 - box.x0, hDeg = box.y1 - box.y0;
-    const pad = Math.max(0.12, Math.max(wDeg * k, hDeg) * 0.07);
-    const lon0 = box.x0 - pad / k, lon1 = box.x1 + pad / k, lat0 = box.y0 - pad, lat1 = box.y1 + pad;
-    wDeg = (lon1 - lon0) * k; hDeg = lat1 - lat0;
+    const wDeg0 = box.x1 - box.x0, hDeg0 = box.y1 - box.y0;
+    const pad = Math.max(0.12, Math.max(wDeg0 * k, hDeg0) * 0.07);
+    const lon0 = box.x0 - pad / k, lon1 = box.x1 + pad / k, lat0 = Math.max(-84, box.y0 - pad), lat1 = Math.min(84, box.y1 + pad);
     const areaDeg = rings.reduce((s, r) => s + r.area, 0);
     const longest = Math.round(S.clamp(100 + Math.sqrt(areaDeg) * 9, 120, 192));
-    let W, H;
-    if (wDeg >= hDeg) { W = longest; H = Math.max(72, Math.round(longest * hDeg / wDeg)); }
-    else { H = longest; W = Math.max(72, Math.round(longest * wDeg / hDeg)); }
+    // Weltauflösung so wählen, dass das Kernland etwa `longest` Felder misst (Mercator: quadratische Felder)
+    const spanX = (lon1 - lon0) / 360, spanY = (S.World.mercY(lat1) - S.World.mercY(lat0)) / (2 * Math.PI);
+    const WT = Math.round(longest / Math.max(spanX, spanY));
+    const kmMid = 40075 * k / WT;
+    const sc = S.clamp(kmMid / 260, 0.055, 0.16);
+    S.World.setup({ WT, seed, sc, home: country.id });
+    const gx0 = Math.floor(S.World.gxOf(lon0)), gx1 = Math.ceil(S.World.gxOf(lon1));
+    const gy0 = Math.floor(S.World.gyOf(lat1)), gy1 = Math.ceil(S.World.gyOf(lat0));
+    const W = gx1 - gx0, H = gy1 - gy0;
     const N = W * H;
-    const kmPerTile = (wDeg * 111) / W;
-    const t = S.newTiles(N);
+    const kmPerTile = kmMid;
 
-    // 1) Länder einzeichnen: zuerst Nachbarn, dann das eigene Land
-    for (const c of S.WORLD) {
-      if (c.id === country.id) continue;
-      const cb = c._box || (c._box = ringBox(c.r.flatMap(r => decodeRing(r))));
-      if (cb.x1 < lon0 || cb.x0 > lon1 || cb.y1 < lat0 || cb.y0 > lat1) continue;
-      for (const r of c.r) {
-        const pts = decodeRing(r), rb = ringBox(pts);
-        if (rb.x1 < lon0 || rb.x0 > lon1 || rb.y1 < lat0 || rb.y0 > lat1) continue;
-        fillRing(pts, t.region, W, H, lon0, lon1, lat0, lat1, 2);
-      }
-    }
-    for (const r of rings) fillRing(r.p, t.region, W, H, lon0, lon1, lat0, lat1, 1);
+    // 1) Gelände, Klima, Wald, Rohstoffe und Grenzen aus der Weltfunktion
+    const t = S.World.tileBlock(gx0, gy0, W, H);
     let homeCount = 0;
     for (let i = 0; i < N; i++) if (t.region[i] === 1) homeCount++;
     if (homeCount < 30) throw new Error('Land zu klein');
-
-    // 2) Höhen
-    const nE = S.makeNoise(seed + 11), nR = S.makeNoise(seed + 23), nM = S.makeNoise(seed + 37), nX = S.makeNoise(seed + 51);
-    const nL = S.makeNoise(seed + 71), nRes = S.makeNoise(seed + 91);
-    const sc = S.clamp(kmPerTile / 260, 0.055, 0.16);
     const isLand = (i) => t.region[i] !== 0;
     const dSea = distField(W, H, i => !isLand(i));
-    const dLand = distField(W, H, i => isLand(i));
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const id = j * W + i;
-      const base = S.fbm(nE, i * sc, j * sc, 5);
-      const ridge = 1 - Math.abs(S.fbm(nR, i * sc * 0.9 + 40, j * sc * 0.9, 4) * 2 - 1);
-      const mzone = S.clamp((S.fbm(nX, i * sc * 0.45, j * sc * 0.45, 2) - 0.54) * 3.2, 0, 1);
-      if (isLand(id)) {
-        const inland = Math.min(1, dSea[id] * kmPerTile / 400);
-        let e = 0.03 + (base - 0.38) * 0.7 + Math.pow(ridge, 3) * mzone * 0.95 + inland * 0.12;
-        e = Math.max(dSea[id] > 1 ? 0.05 : 0.02, e);
-        // Seen im Landesinneren
-        if (dSea[id] > 3 && S.fbm(nL, i * sc * 1.6 + 7, j * sc * 1.6, 3) < 0.24) e = -0.06;
-        t.elev[id] = Math.min(1.25, e);
-      } else {
-        const off = dLand[id] * kmPerTile;
-        t.elev[id] = -0.03 - Math.min(1, off / 140) * 0.4 + (base - 0.5) * 0.08;
-      }
-    }
-
-    // 3) Klima aus echter Breite
-    const latOf = (j) => lat1 - (j + 0.5) / H * (lat1 - lat0);
-    const lonOf = (i) => lon0 + (i + 0.5) / W * (lon1 - lon0);
-    for (let j = 0; j < H; j++) {
-      const lat = Math.abs(latOf(j));
-      const tb = S.clamp(1.0 - Math.pow(lat / 80, 1.6), 0, 1);
-      const dry = 0.46 * Math.exp(-Math.pow((lat - 25) / 9, 2));
-      const wet = 0.18 * Math.exp(-Math.pow(lat / 11, 2));
-      for (let i = 0; i < W; i++) {
-        const id = j * W + i;
-        t.temp[id] = S.clamp(tb + (S.hash2(i, j, seed) - 0.5) * 0.02, 0, 1);
-        const coast = Math.max(0, 1 - dSea[id] * kmPerTile / 500) * 0.18;
-        const cont = Math.min(1, dSea[id] * kmPerTile / 1600) * 0.22;
-        t.moist[id] = S.clamp(0.25 + S.fbm(nM, i * sc * 1.2, j * sc * 1.2, 4) * 0.55 - dry + wet + coast - cont, 0, 1);
-      }
-    }
 
     // 4) Flüsse: von Quellen im Bergland bergab bis ins Meer
     const isW = (id) => t.elev[id] < 0;
@@ -269,19 +223,7 @@
     const dRiver = distField(W, H, i => t.river[i] === 1);
     for (let id = 0; id < N; id++) if (dRiver[id] <= 2) t.moist[id] = Math.min(1, t.moist[id] + 0.12 - dRiver[id] * 0.04);
 
-    // 5) Wald und Rohstoffe
-    const nF = S.makeNoise(seed + 101);
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const id = j * W + i;
-      if (!isLand(id) || isW(id)) continue;
-      const e = t.elev[id], tt = t.temp[id] - Math.max(0, e - 0.4) * 0.5;
-      const f = S.fbm(nF, i * sc * 2, j * sc * 2, 3) + t.moist[id] * 0.55 - 0.35;
-      if (e < S.MOUNTAIN_E && tt > 0.12 && t.moist[id] > 0.45 && f > 0.57) t.forest[id] = 1;
-      const rn = S.fbm(nRes, i * sc * 3, j * sc * 3, 2), h = S.hash2(i, j, seed + 5);
-      if (e > 0.5 && rn > 0.62 && h < 0.35) t.res[id] = S.RES.ORE;
-      else if (e > 0.15 && e < 0.6 && rn < 0.3 && h < 0.18) t.res[id] = S.RES.COAL;
-      else if (e < 0.4 && S.fbm(nRes, i * sc * 2 + 50, j * sc * 2 - 30, 2) > 0.68 && h < 0.3 && t.moist[id] < 0.55) t.res[id] = S.RES.OIL;
-    }
+    // 5) Landschaft nach den Flüssen neu bestimmen
     for (let id = 0; id < N; id++) S.updateBiome({ t }, id);
 
     const G = {
@@ -290,7 +232,7 @@
         id: country.id, name: country.n, en: country.en, inc: country.inc || 3, realPop: country.pop || 1e6,
         gdp: country.gdp, cont: country.cont, gov: opts.gov || 'demokratie', ruler: opts.ruler || '', seed
       },
-      W, H, lon0, lon1, lat0, lat1, kmPerTile, t,
+      W, H, gx0, gy0, world: { WT, seed, sc, home: country.id }, kmPerTile, t,
       cities: [], blds: [],
       eco: null, stats: [], log: [], month: 0, mods: [], ach: {},
       flags: { over: false, sandbox: false }, popScale: 1, cam: null, homeCount
@@ -299,13 +241,14 @@
     return G;
   };
 
-  S.latOf = (G, j) => G.lat1 - (j + 0.5) / G.H * (G.lat1 - G.lat0);
-  S.lonOf = (G, i) => G.lon0 + (i + 0.5) / G.W * (G.lon1 - G.lon0);
+  S.latOf = (G, j) => S.World.latOfGy(G.gy0 + j + 0.5);
+  S.lonOf = (G, i) => S.World.lonOfGx(G.gx0 + i + 0.5);
 
   S.tileOfLonLat = function (G, lon, lat) {
-    const i = Math.floor((lon - G.lon0) / (G.lon1 - G.lon0) * G.W);
-    const j = Math.floor((G.lat1 - lat) / (G.lat1 - G.lat0) * G.H);
-    return [i, j];
+    let gx = S.World.gxOf(lon) - G.gx0;
+    const WT = S.World.WT;
+    while (gx < -WT / 2) gx += WT; while (gx > WT / 2 + G.W) gx -= WT;
+    return [Math.floor(gx), Math.floor(S.World.gyOf(lat) - G.gy0)];
   };
 
   S.isBuildableLand = function (G, id) {

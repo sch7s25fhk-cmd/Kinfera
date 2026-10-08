@@ -94,8 +94,6 @@
 
     <main id="mapWrap">
       <canvas id="mapCanvas" aria-label="Landeskarte"></canvas>
-      <canvas id="globeCanvas" aria-label="Weltansicht" hidden></canvas>
-      <div id="globeBar" hidden><span><b>Weltansicht</b> Hineinzoomen oder dein Land antippen, um zurückzukehren.</span><button class="btn btn-primary btn-small" id="btnBackToLand">Zum Land</button></div>
       <div id="tooltip" hidden></div>
       <div class="zoombtns map-zoom"><button id="zoomIn" aria-label="Hineinzoomen">+</button><button id="zoomOut" aria-label="Herauszoomen">−</button></div>
       <div id="actionBar" hidden>
@@ -105,6 +103,7 @@
       <div id="views" role="group" aria-label="Kartenansicht"></div>
       <div id="toasts" aria-live="polite"></div>
       <button id="btnPanel" class="btn btn-primary panel-toggle">Lage</button>
+      <button id="btnHome" class="btn home-btn" hidden>Zu meinem Land</button>
     </main>
 
     <aside id="panel">
@@ -121,6 +120,7 @@
 <script src="js/util.js"></script>
 <script src="js/defs.js"></script>
 <script src="js/generate.js"></script>
+<script src="js/world.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/render.js"></script>
 <script src="js/worldmap.js"></script>

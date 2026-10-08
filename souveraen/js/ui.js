@@ -13,7 +13,6 @@
   UI.initGame = function (G) {
     UI.G = G;
     UI.tool = 'inspect'; UI.cat = null; UI.sel = null; R.sel = null; R.selCity = null;
-    if (UI.globeMode) UI.exitGlobe(true);
     $('tbName').textContent = G.meta.name;
     const gov = S.GOVS[G.meta.gov];
     $('tbRuler').textContent = G.meta.ruler ? gov.title + ' ' + G.meta.ruler : gov.name;
@@ -77,7 +76,7 @@
   }
 
   UI.selectTool = function (id) {
-    if (id !== 'inspect' && UI.globeMode) UI.exitGlobe();
+    if (id !== 'inspect' && R.ppt < 4) flyHome();
     UI.tool = id;
     UI.pending = null;
     R.preview = null;
@@ -540,13 +539,8 @@
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         // Weltpunkt unter der alten Fingermitte festhalten, dann neue Mitte folgen lassen
-        // weiter herauszoomen als die ganze Karte: Weltansicht (Globus)
-        if (R.cam.z <= R.minZoom() * 1.001 && d < st.d) {
-          st.over = (st.over || 1) * d / st.d;
-          if (st.over < 0.72) { mode = null; ptrs.clear(); UI.enterGlobe(); return; }
-        } else st.over = 1;
         const [wx, wy] = R.screenToWorld(st.mx, st.my);
-        R.cam.z = S.clamp(st.z * d / st.d, 0.02, R.MAX_Z);
+        R.cam.z = S.clamp(st.z * d / st.d, R.minZoom(), R.MAX_Z);
         R.clampCam();
         R.cam.x = wx - (mx - R.cw / 2) / R.cam.z;
         R.cam.y = wy - (my - R.ch / 2) / R.cam.z;
@@ -591,7 +585,7 @@
           lastTap = null;
         } else {
           lastTap = { t: now, x: e.offsetX, y: e.offsetY };
-          tapAt(tx, ty);
+          tapAt(tx, ty, e.offsetX, e.offsetY);
         }
       } else if (mode === 'paint') UI.refresh();
       mode = null;
@@ -602,12 +596,6 @@
     let wheelOver = 1;
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      if (e.deltaY > 0 && R.cam.z <= R.minZoom() * 1.001) {
-        wheelOver *= Math.exp(-e.deltaY * 0.0015);
-        if (wheelOver < 0.7) { wheelOver = 1; UI.enterGlobe(); }
-        return;
-      }
-      wheelOver = 1;
       const [wx, wy] = R.screenToWorld(e.offsetX, e.offsetY);
       R.cam.z *= Math.exp(-e.deltaY * 0.0015);
       R.clampCam();
@@ -615,94 +603,50 @@
       R.cam.y = wy - (e.offsetY - R.ch / 2) / R.cam.z;
       R.clampCam();
     }, { passive: false });
-    $('zoomIn').addEventListener('click', () => { if (UI.globeMode) UI.globe.zoomBy(1.6); else zoomAt(R.cw / 2, R.ch / 2, 1.8); });
-    $('zoomOut').addEventListener('click', () => {
-      if (UI.globeMode) UI.globe.zoomBy(1 / 1.6);
-      else if (R.cam.z <= R.minZoom() * 1.02) UI.enterGlobe();
-      else zoomAt(R.cw / 2, R.ch / 2, 1 / 1.8);
-    });
-    $('btnBackToLand').addEventListener('click', () => flyHome());
+    $('zoomIn').addEventListener('click', () => zoomAt(R.cw / 2, R.ch / 2, 2));
+    $('zoomOut').addEventListener('click', () => zoomAt(R.cw / 2, R.ch / 2, 1 / 2));
+    $('btnHome').addEventListener('click', () => flyHome());
   }
 
-  // ======================= Weltansicht (Globus im Spiel) =======================
-  UI.globeMode = false;
-  const D2R = Math.PI / 180;
-  function landRad() {
-    const G = UI.G, latC = (G.lat0 + G.lat1) / 2;
-    return Math.max((G.lon1 - G.lon0) * Math.cos(latC * D2R), G.lat1 - G.lat0) / 2 * D2R;
-  }
-  /** Zoom, bei dem das Kartengebiet `frac` der kürzeren Bildschirmseite füllt */
-  function zoomForLand(frac) {
-    const g = UI.globe;
-    return S.clamp(Math.min(g.cw, g.ch) * frac / 2 / (g.baseR * Math.sin(Math.min(1.2, landRad()))), 0.7, g.maxZoom);
-  }
-
-  UI.enterGlobe = function () {
-    if (UI.globeMode || !UI.G) return;
-    const G = UI.G;
-    UI.globeMode = true;
-    UI.tool = 'inspect'; UI.pending = null; R.preview = null; R.vel = null; R.zoomAnim = null;
-    closeFlyout(); markToolbar(); syncPreview();
-    $('mapWrap').classList.add('globe-on');
-    $('globeCanvas').hidden = false; $('globeBar').hidden = false;
-    if (!UI.globe) {
-      UI.globe = S.makeGlobe({ noIdle: true, cy: 0.52, maxZoom: 300, onFrame: globeFrame });
-      UI.globe.init($('globeCanvas'), globeTap);
-    }
-    const g = UI.globe;
-    g.resize();
-    g.sel = g.itemById(G.meta.id) || null;
-    const lonC = (G.lon0 + G.lon1) / 2, latC = S.clamp((G.lat0 + G.lat1) / 2, -75, 80);
-    // Start: das Land so groß wie eben auf der Karte, dann zurück ins All
-    g.lon = lonC; g.lat = latC; g.zoom = zoomForLand(0.8);
-    g.vLon = 0; g.vLat = 0;
-    g.flyTo(lonC, latC, Math.max(1, Math.min(g.zoom, zoomForLand(0.22))), 1100);
-    UI.globeT = performance.now();
-    vibrate(8);
-  };
-
-  UI.exitGlobe = function (silent) {
-    if (!UI.globeMode) return;
-    UI.globeMode = false;
-    $('mapWrap').classList.remove('globe-on');
-    $('globeCanvas').hidden = true; $('globeBar').hidden = true;
-    if (silent) return;
-    const G = UI.G;
-    const fitZ = Math.min(R.cw / (G.W * TS()), R.ch / (G.H * TS())) * 0.95;
-    R.cam.x = G.W * TS() / 2; R.cam.y = G.H * TS() / 2; R.cam.z = R.minZoom();
-    R.zoomAnim = { z0: R.cam.z, z1: fitZ, wx: R.cam.x, wy: R.cam.y, sx: R.cw / 2, sy: R.ch / 2, t: 0 };
-  };
-  const TS = () => S.TS;
-
+  // ======================= Weltkarte =======================
+  /** Zurück zum eigenen Land (Kameraflug) */
   function flyHome() {
-    const G = UI.G, g = UI.globe;
-    g.flyTo((G.lon0 + G.lon1) / 2, S.clamp((G.lat0 + G.lat1) / 2, -75, 80), zoomForLand(0.95), 700);
-    UI.globeT = performance.now() - 2000;
-  }
-
-  /** Pro Bild: Rückkehr, sobald das eigene Land den Bildschirm füllt */
-  function globeFrame(g) {
-    if (!UI.globeMode || g.anim || performance.now() - UI.globeT < 1300) return;
-    const size = g.zoom * g.baseR * Math.sin(Math.min(1.2, landRad())) * 2;
-    // nur zurück, wenn das Land ungefähr in der Mitte ist
     const G = UI.G;
-    let dLon = (G.lon0 + G.lon1) / 2 - g.lon; while (dLon > 180) dLon -= 360; while (dLon < -180) dLon += 360;
-    const off = Math.hypot(dLon * Math.cos(g.lat * D2R), (G.lat0 + G.lat1) / 2 - g.lat) * D2R;
-    if (size > Math.min(g.cw, g.ch) * 0.9 && off < landRad() * 1.2 + 0.02) UI.exitGlobe();
+    R.vel = null;
+    R.flyTo(G.W * S.TS / 2, G.H * S.TS / 2, R.fitZoom(), 1600);
+  }
+  UI.flyHome = flyHome;
+
+  /** Antippen außerhalb des eigenen Rasters oder auf dem Globus */
+  function tapWorld(sx, sy) {
+    const G = UI.G;
+    const ll = R.pickLonLat(sx, sy);
+    if (!ll) return;
+    const World = S.World;
+    const o = World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1]));
+    if (!o) { UI.toast('Offenes Meer · ' + S.fmt1(Math.abs(ll[1])) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + ', ' + S.fmt1(Math.abs(ll[0])) + '° ' + (ll[0] >= 0 ? 'O' : 'W'), 'info', 1800); return; }
+    const c = S.WORLD[o - 1];
+    if (c.id === G.meta.id) { if (R.ppt < 3) flyHome(); else UI.toast(c.n + ' – dein Land (außerhalb des verwalteten Gebiets)', 'info', 2200); return; }
+    const near = World.citiesNear(Math.floor(World.gxOf(ll[0])) - 6, Math.floor(World.gyOf(ll[1])) - 6, 12, 12).filter(n => n.c.cid === c.id);
+    const city = near.length ? near.sort((a, b) => Math.hypot(a.gx - World.gxOf(ll[0]), a.gy - World.gyOf(ll[1])) - Math.hypot(b.gx - World.gxOf(ll[0]), b.gy - World.gyOf(ll[1])))[0].c : null;
+    UI.toast(c.n + ' · ' + S.fmtPop(c.pop) + ' Einwohner' + (city && R.ppt >= 3 ? ' · bei ' + city.name : ''), 'info', 2400);
   }
 
-  function globeTap(item) {
-    const G = UI.G, g = UI.globe;
-    const own = g.itemById(G.meta.id);
-    g.sel = own;
-    if (item === own) { flyHome(); return; }
-    UI.toast(item.c.n + ' · ' + S.fmtPop(item.c.pop) + ' Einwohner', 'info', 2200);
+  /** „Zu meinem Land“ zeigen, wenn das Land nicht im Bild ist */
+  function updateHomeBtn() {
+    const G = UI.G;
+    if (!G || !R.cw) return;
+    const [sx0, sy0] = R.worldToScreen(0, 0), [sx1, sy1] = R.worldToScreen(G.W * S.TS, G.H * S.TS);
+    const visible = sx1 > R.cw * 0.2 && sx0 < R.cw * 0.8 && sy1 > R.ch * 0.2 && sy0 < R.ch * 0.8;
+    const far = R.flatA < 1 || !visible;
+    const btn = $('btnHome');
+    if (btn.hidden === far) btn.hidden = !far;
   }
 
   /** Weiches Zoomen um einen Bildschirmpunkt */
   function zoomAt(sx, sy, f) {
     const [wx, wy] = R.screenToWorld(sx, sy);
-    const z1 = S.clamp(R.cam.z * f, 0.02, R.MAX_Z);
+    const z1 = S.clamp(R.cam.z * f, R.minZoom(), R.MAX_Z);
     R.zoomAnim = { z0: R.cam.z, z1, wx, wy, sx, sy, t: 0 };
   }
 
@@ -710,11 +654,20 @@
   UI.frame = function (dt) {
     if (R.zoomAnim) {
       const a = R.zoomAnim;
-      a.t = Math.min(1, a.t + dt / 260);
-      const e = 1 - Math.pow(1 - a.t, 3);
-      R.cam.z = Math.exp(Math.log(a.z0) + (Math.log(a.z1) - Math.log(a.z0)) * e);
-      R.cam.x = a.wx - (a.sx - R.cw / 2) / R.cam.z;
-      R.cam.y = a.wy - (a.sy - R.ch / 2) / R.cam.z;
+      a.t = Math.min(1, a.t + dt / (a.ms || 260));
+      if (a.fly) {
+        // Flug: Position folgt dem Zoom, damit das Ziel nie aus dem Bild rutscht
+        const e = a.t < 0.5 ? 4 * a.t * a.t * a.t : 1 - Math.pow(-2 * a.t + 2, 3) / 2;
+        R.cam.z = Math.exp(Math.log(a.z0) + (Math.log(a.z1) - Math.log(a.z0)) * e);
+        const ep = Math.min(1, e * 1.6);
+        R.cam.x = a.x0 + (a.x1 - a.x0) * ep;
+        R.cam.y = a.y0 + (a.y1 - a.y0) * ep;
+      } else {
+        const e = 1 - Math.pow(1 - a.t, 3);
+        R.cam.z = Math.exp(Math.log(a.z0) + (Math.log(a.z1) - Math.log(a.z0)) * e);
+        R.cam.x = a.wx - (a.sx - R.cw / 2) / R.cam.z;
+        R.cam.y = a.wy - (a.sy - R.ch / 2) / R.cam.z;
+      }
       R.clampCam();
       if (a.t >= 1) R.zoomAnim = null;
     } else if (R.vel) {
@@ -724,6 +677,7 @@
       R.clampCam();
       if (Math.abs(R.vel.x) + Math.abs(R.vel.y) < 0.01) R.vel = null;
     }
+    updateHomeBtn();
   };
 
   // --- Linien (Straße, Bahn)
@@ -776,11 +730,16 @@
   }
 
   // --- Antippen
-  function tapAt(tx, ty) {
+  function tapAt(tx, ty, sx, sy) {
     const G = UI.G, tool = S.TOOLS[UI.tool];
-    if (!S.inb(G, tx, ty)) return;
+    if (R.flatA < 1 || !S.inb(G, tx, ty)) {
+      if (tool.kind === 'inspect') tapWorld(sx, sy);
+      else UI.toast('Dort kannst du nicht bauen: außerhalb deines Staatsgebiets.', 'warn', 2000);
+      return;
+    }
     if (tool.kind === 'inspect') {
       const id = S.idx(G, tx, ty);
+      if (G.t.region[id] === 2 && !G.t.bld[id]) { tapWorld(sx, sy); return; }
       const cid = G.t.city[id];
       if (cid && (S.isUrban(G.t.bld[id]) || G.t.road[id])) UI.selectCity(G.cities[cid - 1]);
       else { UI.sel = { x: tx, y: ty }; R.sel = [tx, ty]; R.selCity = null; UI.showTab('auswahl'); }
@@ -1032,7 +991,7 @@
       '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zu einer Stadt führt. Städte ohne Verbindung zur Hauptstadt sind unzufrieden.</p>' +
       '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
-      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Zoomst du über die ganze Karte hinaus, erscheint dein Land auf dem Globus – hineinzoomen oder das Land antippen bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
+      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Monat dauert 6 Sekunden, schneller geht es mit den Pfeilen oben. Pause hält alles an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());

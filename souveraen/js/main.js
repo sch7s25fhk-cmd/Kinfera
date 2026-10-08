@@ -2,7 +2,7 @@
 'use strict';
 (function (S) {
   const $ = (id) => document.getElementById(id);
-  const SAVE_KEY = 'souveraen.save.v1';
+  const SAVE_KEY = 'souveraen.save.v3'; // v3: Länder liegen im gemeinsamen Weltraster
   const MS_PER_MONTH = [0, 6000, 3000, 1300]; // ein Monat: 6 s, 3 s oder 1,3 s
   const FLAGS = ['#c0392b', '#1f6fb2', '#2e8b57', '#d4a017', '#7d3c98', '#d35400', '#16a085', '#b03a2e'];
   S.WORLD = window.WORLD_DATA;
@@ -53,7 +53,7 @@
     if (info) { btn.hidden = false; btn.textContent = 'Weiterspielen: ' + info.name + ', ' + S.dateStr(info.month); }
     else btn.hidden = true;
   }
-  S.toWorld = function () { if (S.UI.globeMode) S.UI.exitGlobe(true); G = null; S.UI.G = null; S.R.G = null; showWorld(); };
+  S.toWorld = function () { G = null; S.UI.G = null; S.R.G = null; showWorld(); };
 
   function selectCountry(item) {
     selected = item;
@@ -151,16 +151,18 @@
     S.R.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     S.onDirty = (x0, y0, x1, y1) => S.R.markDirty(x0, y0, x1, y1);
     S.onLog = (text, kind) => { if (kind !== 'info') S.UI.toast(text, kind, 5200); };
+    S.World.setup(G.world);
     requestAnimationFrame(() => {
       S.R.init(G, $('mapCanvas'));
-      if (G.cam) { Object.assign(S.R.cam, G.cam); S.R.clampCam(); }
-      else {
-        const cap = G.cities.find(c => c.capital) || G.cities[0];
-        S.R.fit();
-        if (cap && S.R.cam.z < 0.7) S.R.centerOn(cap.x, cap.y, 0.85);
-      }
       S.UI.initGame(G);
-      if (fresh) { S.UI.openBriefing(G); S.save(G); }
+      if (G.cam && !fresh) { Object.assign(S.R.cam, G.cam); S.R.clampCam(); }
+      else {
+        // Anflug aus dem All auf das eigene Land
+        S.R.cam.x = G.W * S.TS / 2; S.R.cam.y = G.H * S.TS / 2;
+        S.R.cam.z = S.R.zForGlobeR(Math.min(S.R.cw, S.R.ch) * 0.9);
+        S.R.flyTo(S.R.cam.x, S.R.cam.y, S.R.fitZoom(), 3000);
+      }
+      if (fresh) { S.save(G); setTimeout(() => { if (S.UI.G === G) S.UI.openBriefing(G); }, 3100); }
     });
   }
 
@@ -183,8 +185,8 @@
           if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
         }
       }
-      if (S.UI.globeMode) S.UI.globe.draw(now);
-      else { S.UI.frame(dt); S.R.draw(now); }
+      S.UI.frame(dt);
+      S.R.draw(now);
     }
     requestAnimationFrame(loop);
   }
@@ -196,7 +198,7 @@
     $('gZoomOut').addEventListener('click', () => S.WM.zoomBy(1 / 1.6));
     window.addEventListener('resize', () => {
       S.WM.resize();
-      if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); if (S.UI.globe) S.UI.globe.resize(); }
+      if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); }
     });
     document.addEventListener('visibilitychange', () => { if (document.hidden && G) S.save(G); });
     const hot = window.claude && window.claude.hot;

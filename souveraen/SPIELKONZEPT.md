@@ -85,7 +85,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Gebäude** in Schrägansicht mit Schatten; jeder Stadtstil hat eigene Farben und Bauformen. Rauch aus Schloten, Dampf aus Kühltürmen.
 - **Datenansichten:** Wohndichte, Zufriedenheit, Verschmutzung, Fruchtbarkeit, Rohstoffe, Verkehrsnetz.
 - Werkzeug-Symbole sind Miniaturen der echten Gebäude auf der Karte.
-- **Zoom** vom ganzen Erdball über die Landesübersicht bis zu einzelnen Häusern (4-fach). Wer über die Landeskarte hinaus herauszoomt, fliegt nahtlos auf den Globus, auf dem das eigene Land golden leuchtet; Hineinzoomen bringt einen zurück. Das Spiel läuft dabei weiter. Die Karte wird in Blöcken gezeichnet, deren Schärfe der Zoomstufe folgt; weit herausgezoomt zeigt eine Übersichtskarte Städte, Straßen und Flüsse.
+- **Eine durchgehende Welt:** Die ganze Erde liegt in einem gemeinsamen Feldraster (Mercator). Gelände, Klima, Wälder, Rohstoffe, Ländergrenzen und die echten Großstädte fremder Länder werden beim Hinsehen berechnet – überall gleich, ohne Nähte. Das eigene Land ist das Fenster in diese Welt, das simuliert und bebaut wird.
+- **Stufenloser Zoom** vom Weltall bis zu einzelnen Häusern: 3D-Globus → flache Weltkarte mit Ländern → Landkarte mit Gelände, Städten und Straßen → Detailansicht (4-fach). Die Stufen blenden ineinander über, die Kamera ist für alle dieselbe. Neue Spiele beginnen mit einem Anflug aus dem All. Man kann frei über die Grenzen hinaus durch die ganze Welt scrollen; „Zu meinem Land“ fliegt zurück.
 
 ### Touch-Steuerung
 
@@ -111,7 +112,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/generate.js` | Landeskarte aus echten Grenzen: Höhen, Klima, Flüsse, Wald, Rohstoffe, Startstädte, Straßen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
-| `js/worldmap.js` | 3D-Globus zur Länderwahl |
+| `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |
+| `js/worldmap.js` | 3D-Globus (Länderwahl und weiteste Zoomstufe im Spiel) |
 | `js/ui.js` | Werkzeuge, Panels, Dialoge, Maus- und Touch-Steuerung |
 | `js/main.js` | Start, Spielschleife, Speichern |
 | `tools/build_data.py` | Erzeugt `world.js` aus Natural-Earth-GeoJSON |
@@ -119,6 +121,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `tools/build_single.py` | Baut eine einzelne HTML-Datei zum Teilen |
 
 ## 7. Ausbaustufen (Ideen für später)
+
+0. **Militär und Eroberung** (vorbereitet): Jedes Feld der Welt kennt sein Land (`owner`). Geplant sind Armeen aus Kasernen, Truppen auf der Karte, Angriffe auf Nachbarn, Frontlinien und Besetzung. Erobertes Gebiet wechselt den Besitzer, das verwaltete Raster des eigenen Landes wächst mit, eroberte Städte werden zu echten eigenen Städten. Krieg kostet Geld und Zustimmung und kann Gegenangriffe und Sanktionen auslösen.
 
 1. **Echte Höhendaten** (z. B. ETOPO) statt prozeduraler Berge – die Alpen lägen dann wirklich in Süddeutschland.
 2. **Diplomatie und Nachbarn:** Handelsverträge, Grenzkonflikte, Bündnisse; Nachbarländer als KI-Staaten.

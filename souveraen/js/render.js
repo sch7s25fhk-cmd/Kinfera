@@ -7,46 +7,47 @@
   const R = S.R = { cam: { x: 0, y: 0, z: 1 }, dpr: 1, view: 'none', anim: 0, hover: null, preview: null, sel: null };
 
   // ---------------- Initialisierung ----------------
-  const CH = 16;          // Kacheln pro Zwischenspeicher-Block
-  const OV = 8;           // Pixel pro Kachel in der Übersicht (weit herausgezoomt)
+  // Alle Weltpixel-Koordinaten (cam.x/cam.y) zählen ab der linken oberen Ecke des eigenen Landesrasters.
+  // Globale Feldkoordinate = lokale Feldkoordinate + G.gx0 / G.gy0.
+  const CH = 16;          // Felder pro Detailblock
+  const OCH = 64;         // Felder pro Übersichtsblock
+  const BP = 3;           // Rand eines Detailblocks in Feldern
   const CM = 2;           // Rand in Pixeln, damit Blöcke nahtlos aneinanderstoßen
-  const PIX_BUDGET = 22e6;
+  const PIX_BUDGET = 26e6;
+  const World = S.World;
 
   R.init = function (G, canvas) {
     R.G = G;
     R.canvas = canvas;
     R.ctx = canvas.getContext('2d');
-    R.terr = document.createElement('canvas');
-    R.terr.width = G.W * PX; R.terr.height = G.H * PX;
-    R.tctx = R.terr.getContext('2d');
-    R.img = R.tctx.createImageData(G.W * PX, G.H * PX);
-    R.foreign = new Float32Array(G.W * G.H);
-    for (let i = 0; i < G.W * G.H; i++) R.foreign[i] = G.t.region[i] === 2 ? 1 : 0;
     R.noiseA = S.makeNoise(G.meta.seed + 501);
     R.noiseB = S.makeNoise(G.meta.seed + 502);
     R.dirty = null;
-    R.border = buildBorder(G);
-    R.chunks = new Map();
+    R.chunks = new Map();     // Detailblöcke (gezeichnet)
+    R.ochunks = new Map();    // Übersichtsblöcke
+    R.bases = new Map();      // reine Weltdaten je Block (unveränderlich)
     R.pix = 0;
     R.frame = 0;
-    R.ov = document.createElement('canvas');
-    R.ov.width = G.W * OV; R.ov.height = G.H * OV;
-    R.octx = R.ov.getContext('2d');
+    R.stats = { renders: 0, ms: 0 };
     R.viewCv = document.createElement('canvas');
     R.viewCv.width = G.W; R.viewCv.height = G.H;
     R.viewKey = null;
-    terrainPixels(G, 0, 0, G.W - 1, G.H - 1);
-    paintOverview(0, 0, G.W - 1, G.H - 1);
+    if (!R.globe) {
+      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2 });
+      R.globe.init(canvas, () => {});
+    }
+    R.globe.sel = R.globe.itemById(G.meta.id) || null;
     R.resize();
   };
 
   R.resize = function () {
     const c = R.canvas;
-    R.dpr = Math.min(3, window.devicePixelRatio || 1);
+    R.dpr = Math.min(2, window.devicePixelRatio || 1);
     const r = c.getBoundingClientRect();
     c.width = Math.max(1, Math.round(r.width * R.dpr));
     c.height = Math.max(1, Math.round(r.height * R.dpr));
     R.cw = r.width; R.ch = r.height;
+    if (R.globe) R.globe.resize();
   };
 
   R.markDirty = function (x0, y0, x1, y1) {
@@ -55,227 +56,346 @@
     else { d[0] = Math.min(d[0], x0); d[1] = Math.min(d[1], y0); d[2] = Math.max(d[2], x1); d[3] = Math.max(d[3], y1); }
     R.viewKey = null;
   };
+  /** Geänderte Felder des eigenen Landes: betroffene Blöcke als veraltet markieren */
   R.flush = function () {
     if (!R.dirty) return;
-    const G = R.G;
+    const G = R.G, WT = World.WT;
     let [x0, y0, x1, y1] = R.dirty;
     R.dirty = null;
-    x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(G.W - 1, x1 + 2); y1 = Math.min(G.H - 1, y1 + 2);
-    terrainPixels(G, x0, y0, x1, y1);
-    paintOverview(x0, y0, x1, y1);
-    // betroffene Blöcke als veraltet markieren (hohe Gebäude ragen nach oben)
-    const cx0 = Math.floor(x0 / CH), cx1 = Math.floor(x1 / CH), cy0 = Math.floor((y0 - 3) / CH), cy1 = Math.floor((y1 + 1) / CH);
-    for (const e of R.chunks.values()) if (e.cx >= cx0 && e.cx <= cx1 && e.cy >= cy0 && e.cy <= cy1) e.stale = true;
+    const gx0 = x0 + G.gx0 - 2, gx1 = x1 + G.gx0 + 2, gy0 = y0 + G.gy0 - 4, gy1 = y1 + G.gy0 + 2;
+    const hit = (e, size) => {
+      for (const k of [-WT, 0, WT]) {
+        const ex0 = e.cx * size + k, ey0 = e.cy * size;
+        if (ex0 <= gx1 + BP && ex0 + size >= gx0 - BP && ey0 <= gy1 + BP && ey0 + size >= gy0 - BP) return true;
+      }
+      return false;
+    };
+    for (const e of R.chunks.values()) if (hit(e, CH)) e.stale = true;
+    for (const e of R.ochunks.values()) if (hit(e, OCH)) e.stale = true;
   };
 
-  // ---------------- Gelände als Pixelbild ----------------
-  function terrainPixels(G, tx0, ty0, tx1, ty1) {
-    const { W, H, t } = G;
-    const data = R.img.data, IW = W * PX;
-    const E = t.elev, M = t.moist, T = t.temp, F = t.forest, IR = t.irrig, FG = R.foreign;
-    const nA = R.noiseA, nB = R.noiseB, seed = G.meta.seed;
-    const px0 = Math.max(0, tx0 * PX), py0 = Math.max(0, ty0 * PX);
-    const px1 = Math.min(W * PX, (tx1 + 1) * PX), py1 = Math.min(H * PX, (ty1 + 1) * PX);
-    for (let py = py0; py < py1; py++) {
+  // ---------------- Kamera-Umrechnungen ----------------
+  R.camGX = () => R.cam.x / TS + R.G.gx0;
+  R.camGY = () => R.cam.y / TS + R.G.gy0;
+  R.camLat = () => World.latOfGy(R.camGY());
+  R.camLon = () => World.lonOfGx(R.camGX());
+  /** Radius, den der Globus bei dieser Kamera hätte (CSS-Pixel) */
+  R.globeR = (z) => (z || R.cam.z) * TS * World.WT / (2 * Math.PI) / Math.cos(R.camLat() * Math.PI / 180);
+  const md = () => Math.min(R.cw, R.ch);
+  R.zForGlobeR = (gr) => gr * 2 * Math.PI * Math.cos(R.camLat() * Math.PI / 180) / (TS * World.WT);
+  R.GLOBE_FULL = 1.35; R.GLOBE_FLAT = 2.2;   // Übergang Globus → Karte (Radius / Bildschirm)
+
+  // ---------------- Weltdaten eines Blocks ----------------
+  const wrapC = (c, n) => ((c % n) + n) % n;
+  function baseFor(kind, cx, cy, size, pad) {
+    const key = kind + cx + ',' + cy;
+    let b = R.bases.get(key);
+    if (b) { b.used = R.frame; return b; }
+    b = { t: World.tileBlock(cx * size - pad, cy * size - pad, size + 2 * pad, size + 2 * pad), used: R.frame };
+    R.bases.set(key, b);
+    if (R.bases.size > 260) {
+      const list = [...R.bases.entries()].sort((a, c2) => a[1].used - c2[1].used);
+      for (let i = 0; i < 60; i++) R.bases.delete(list[i][0]);
+    }
+    return b;
+  }
+
+  /** Feldblock (wie G aufgebaut) aus Weltdaten + eigenem Land + fremden Städten */
+  function makeBlock(kind, cx, cy, size, pad) {
+    const G = R.G, WT = World.WT;
+    const base = baseFor(kind, cx, cy, size, pad).t;
+    const W = size + 2 * pad, H = W, N = W * H;
+    const t = {};
+    for (const k in base) t[k] = base[k].slice();
+    const gx0 = cx * size - pad, gy0 = cy * size - pad;
+    // Lage relativ zum eigenen Raster (Umlauf in Länge beachten)
+    let ox = gx0 - G.gx0;
+    while (ox < -WT / 2) ox += WT; while (ox > WT / 2) ox -= WT;
+    const oy = gy0 - G.gy0;
+    const cities = G.cities.map(c => ({ style: c.style, x: c.x - ox, y: c.y - oy, name: c.name }));
+    const nHome = cities.length;
+    const near = World.citiesNear(gx0, gy0, W, H).filter(n => n.c.cid !== G.meta.id);
+    const foreignIdx = new Map();
+    const GT = G.t;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const id = j * W + i;
+      const lx = i + ox, ly = j + oy;
+      if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) {
+        const gi = ly * G.W + lx;
+        for (const k in t) if (GT[k]) t[k][id] = GT[k][gi];
+        if (t.region[id] === 1 || t.bld[id] || t.road[id]) continue;
+      }
+      const o = t.owner[id];
+      if (!o || t.elev[id] < 0 || t.region[id] === 1) continue;
+      const u = World.urbanAt(near, gx0 + i, gy0 + j, o);
+      if (!u) continue;
+      let ci = foreignIdx.get(u.city);
+      if (ci === undefined) { ci = cities.length; foreignIdx.set(u.city, ci); cities.push({ style: u.city.style, x: Math.floor(u.city.gx) - gx0, y: Math.floor(u.city.gy) - gy0, name: u.city.name, foreign: true }); }
+      t.forest[id] = 0;
+      if (u.road) { t.road[id] = 1; t.city[id] = ci + 1; }
+      else { t.bld[id] = u.type; t.lvl[id] = u.lvl; t.city[id] = ci + 1; }
+    }
+    return { W, H, t, cities, nHome, meta: G.meta, gx0, gy0, ox, oy, pad };
+  }
+
+  // ---------------- Gelände als Pixelbild eines Blocks ----------------
+  function terrainImage(Bk, PX) {
+    const { W, H, t } = Bk;
+    const cv = document.createElement('canvas');
+    cv.width = W * PX; cv.height = H * PX;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(W * PX, H * PX);
+    const data = img.data, IW = W * PX;
+    const E = t.elev, M = t.moist, T = t.temp, F = t.forest, IR = t.irrig;
+    const nA = R.noiseA, nB = R.noiseB, seed = Bk.meta.seed;
+    const gpx = World.wrapGx(Bk.gx0) * PX, gpy = Bk.gy0 * PX;
+    for (let py = 0; py < H * PX; py++) {
       const fy = (py + 0.5) / PX - 0.5;
       let j0 = Math.floor(fy); let v = fy - j0;
       if (j0 < 0) { j0 = 0; v = 0; } else if (j0 > H - 2) { j0 = H - 2; v = 1; }
-      for (let px = px0; px < px1; px++) {
+      for (let px = 0; px < W * PX; px++) {
         const fx = (px + 0.5) / PX - 0.5;
         let i0 = Math.floor(fx); let u = fx - i0;
         if (i0 < 0) { i0 = 0; u = 0; } else if (i0 > W - 2) { i0 = W - 2; u = 1; }
         const a = j0 * W + i0, b = a + 1, c = a + W, d = c + 1;
         const w00 = (1 - u) * (1 - v), w10 = u * (1 - v), w01 = (1 - u) * v, w11 = u * v;
-        const n1 = nA(px * 0.33, py * 0.33), n2 = nB(px * 0.17, py * 0.17);
-        const grain = S.hash2(px, py, seed) - 0.5;
+        const qx = gpx + px, qy = gpy + py;
+        const n1 = nA(qx * 1.32 / PX, qy * 1.32 / PX), n2 = nB(qx * 0.68 / PX, qy * 0.68 / PX);
+        const grain = S.hash2(qx, qy, seed) - 0.5;
         const e = E[a] * w00 + E[b] * w10 + E[c] * w01 + E[d] * w11 + (n1 - 0.5) * 0.03;
         const m = M[a] * w00 + M[b] * w10 + M[c] * w01 + M[d] * w11 + (n2 - 0.5) * 0.12;
         const tt = T[a] * w00 + T[b] * w10 + T[c] * w01 + T[d] * w11;
         const f = F[a] * w00 + F[b] * w10 + F[c] * w01 + F[d] * w11 + (n1 - 0.5) * 0.7;
         const ir = IR[a] * w00 + IR[b] * w10 + IR[c] * w01 + IR[d] * w11 + (n2 - 0.5) * 0.4;
-        const fg = FG[a] * w00 + FG[b] * w10 + FG[c] * w01 + FG[d] * w11;
-        let r, g, bl;
-        if (e < 0) {
-          const dep = S.clamp(-e / 0.4, 0, 1);
-          r = 70 - 48 * dep; g = 146 - 84 * dep; bl = 182 - 74 * dep;
-          if (e > -0.025) { r += 30; g += 26; bl += 14; }
-          r += grain * 4; g += grain * 4; bl += grain * 5;
-        } else {
-          const bio = S.biomeOf(e, m, tt, f > 0.5 ? 1 : 0, ir > 0.5 ? 1 : 0);
-          const col = S.BIOME_RGB[bio];
-          r = col[0]; g = col[1]; bl = col[2];
-          if (bio === B.GRASS || bio === B.STEPPE || bio === B.SAVANNA) {
-            const lush = S.clamp((m - 0.35) * 1.6, -0.4, 0.5);
-            r -= lush * 26; g += lush * 10; bl -= lush * 12;
-          }
-          if (bio === B.MOUNTAIN && e > 1.0) { r = 236; g = 240; bl = 244; }
-          // Relief: Licht aus Nordwest
-          const dx = (1 - v) * (E[b] - E[a]) + v * (E[d] - E[c]);
-          const dy = (1 - u) * (E[c] - E[a]) + u * (E[d] - E[b]);
-          const sh = S.clamp((dx + dy) * 150, -38, 38) + (e > 0.3 ? (e - 0.3) * 18 : 0);
-          r += sh; g += sh; bl += sh * 0.9;
-          r += grain * 9; g += grain * 9; bl += grain * 7;
-        }
-        if (fg > 0.01) {
-          const grey = (r * 0.3 + g * 0.55 + bl * 0.15);
-          const k = fg * 0.62;
-          r = r + (grey * 0.92 + 18 - r) * k; g = g + (grey * 0.92 + 18 - g) * k; bl = bl + (grey * 0.92 + 22 - bl) * k;
-        }
+        const col = landColor(e, m, tt, f, ir, (1 - v) * (E[b] - E[a]) + v * (E[d] - E[c]), (1 - u) * (E[c] - E[a]) + u * (E[d] - E[b]), grain);
         const o = (py * IW + px) * 4;
-        data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
+        data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = 255;
       }
     }
-    R.tctx.putImageData(R.img, 0, 0, px0, py0, px1 - px0, py1 - py0);
+    ctx.putImageData(img, 0, 0);
+    return cv;
   }
 
-  // ---------------- Grenze aus Kacheln ----------------
-  function buildBorder(G) {
-    const { W, H, t } = G;
-    const segs = [];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (t.region[y * W + x] !== 1) continue;
-      const other = (nx, ny) => !S.inb(G, nx, ny) || t.region[ny * W + nx] === 2;
-      if (other(x + 1, y)) segs.push([x + 1, y, x + 1, y + 1]);
-      if (other(x - 1, y)) segs.push([x, y, x, y + 1]);
-      if (other(x, y + 1)) segs.push([x, y + 1, x + 1, y + 1]);
-      if (other(x, y - 1)) segs.push([x, y, x + 1, y]);
+  const _col = [0, 0, 0];
+  function landColor(e, m, tt, f, ir, dx, dy, grain) {
+    let r, g, bl;
+    if (e < 0) {
+      const dep = S.clamp(-e / 0.4, 0, 1);
+      r = 70 - 48 * dep; g = 146 - 84 * dep; bl = 182 - 74 * dep;
+      if (e > -0.025) { r += 30; g += 26; bl += 14; }
+      r += grain * 4; g += grain * 4; bl += grain * 5;
+    } else {
+      const bio = S.biomeOf(e, m, tt, f > 0.5 ? 1 : 0, ir > 0.5 ? 1 : 0);
+      const col = S.BIOME_RGB[bio];
+      r = col[0]; g = col[1]; bl = col[2];
+      if (bio === B.GRASS || bio === B.STEPPE || bio === B.SAVANNA) {
+        const lush = S.clamp((m - 0.35) * 1.6, -0.4, 0.5);
+        r -= lush * 26; g += lush * 10; bl -= lush * 12;
+      }
+      if (bio === B.MOUNTAIN && e > 1.0) { r = 236; g = 240; bl = 244; }
+      const sh = S.clamp((dx + dy) * 150, -38, 38) + (e > 0.3 ? (e - 0.3) * 18 : 0);
+      r += sh; g += sh; bl += sh * 0.9;
+      r += grain * 9; g += grain * 9; bl += grain * 7;
     }
-    return segs;
+    _col[0] = r; _col[1] = g; _col[2] = bl;
+    return _col;
   }
 
-  // ---------------- Bereich zeichnen (Weltkoordinaten) ----------------
-  function paintRegion(c, x0, y0, x1, y1) {
-    const G = R.G, { W, H } = G;
+  // ---------------- Grenzen (zwischen Ländern, das eigene in Gold) ----------------
+  function drawBorders(c, Bk, x0, y0, x1, y1, scale, home) {
+    const { W, t } = Bk;
+    const homeIdx = World.homeIdx;
+    const segs = [[], []];
+    for (let y = Math.max(0, y0); y <= Math.min(Bk.H - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(W - 1, x1); x++) {
+      const o = t.owner[y * W + x];
+      if (!o) continue;
+      if (x + 1 < W) { const p = t.owner[y * W + x + 1]; if (p && p !== o) segs[(o === homeIdx || p === homeIdx) ? 1 : 0].push(x + 1, y, x + 1, y + 1); }
+      if (y + 1 < Bk.H) { const p = t.owner[(y + 1) * W + x]; if (p && p !== o) segs[(o === homeIdx || p === homeIdx) ? 1 : 0].push(x, y + 1, x + 1, y + 1); }
+    }
+    const draw = (arr, col, w, dash) => {
+      if (!arr.length) return;
+      c.strokeStyle = col; c.lineWidth = w; c.setLineDash(dash);
+      c.beginPath();
+      for (let i = 0; i < arr.length; i += 4) { c.moveTo(arr[i] * scale, arr[i + 1] * scale); c.lineTo(arr[i + 2] * scale, arr[i + 3] * scale); }
+      c.stroke(); c.setLineDash([]);
+    };
+    draw(segs[0], 'rgba(70,40,30,0.6)', home.w * 0.8, home.dash);
+    draw(segs[1], 'rgba(232,178,58,0.95)', home.w, []);
+  }
+
+  // ---------------- Detailblock zeichnen ----------------
+  function paintBlock(c, Bk) {
+    const { W, H, pad } = Bk;
+    const x0 = pad, y0 = pad, x1 = W - pad - 1, y1 = H - pad - 1;
     c.save();
     c.beginPath();
-    c.rect(x0 * TS, y0 * TS, (x1 - x0 + 1) * TS, (y1 - y0 + 1) * TS);
+    c.rect((x0 - 1) * TS, (y0 - 1) * TS, (x1 - x0 + 3) * TS, (y1 - y0 + 3) * TS);
     c.clip();
-    const sx0 = Math.max(0, x0 - 2), sy0 = Math.max(0, y0 - 2), sx1 = Math.min(W, x1 + 3), sy1 = Math.min(H, y1 + 3);
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
-    c.drawImage(R.terr, sx0 * PX, sy0 * PX, (sx1 - sx0) * PX, (sy1 - sy0) * PX, sx0 * TS, sy0 * TS, (sx1 - sx0) * TS, (sy1 - sy0) * TS);
-    const gx0 = Math.max(0, x0 - 2), gy0 = Math.max(0, y0 - 2), gx1 = Math.min(W - 1, x1 + 2), gy1 = Math.min(H - 1, y1 + 2);
-    for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawGround(c, G, x, y);
-    for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawRoads(c, G, x, y);
-    c.strokeStyle = 'rgba(70,40,30,0.55)';
-    c.lineWidth = 3;
-    c.setLineDash([7, 5]);
-    c.beginPath();
-    for (const s of R.border) {
-      if (s[2] < gx0 || s[0] > gx1 + 1 || s[3] < gy0 || s[1] > gy1 + 1) continue;
-      c.moveTo(s[0] * TS, s[1] * TS); c.lineTo(s[2] * TS, s[3] * TS);
-    }
-    c.stroke();
-    c.setLineDash([]);
+    c.drawImage(Bk.terr, 0, 0, W * TS, H * TS);
+    const gx0 = x0 - 2, gy0 = y0 - 2, gx1 = x1 + 2, gy1 = y1 + 2;
+    for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawGround(c, Bk, x, y);
+    for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawRoads(c, Bk, x, y);
+    drawBorders(c, Bk, gx0, gy0, gx1, gy1, TS, { w: 3, dash: [7, 5] });
     const oy1 = Math.min(H - 1, y1 + 3);
-    for (let y = gy0; y <= oy1; y++) for (let x = gx0; x <= gx1; x++) drawObject(c, G, x, y);
+    for (let y = gy0; y <= oy1; y++) for (let x = gx0; x <= gx1; x++) drawObject(c, Bk, x, y);
     c.restore();
   }
 
-  /** Einen Block in der gewünschten Auflösung (Pixel pro Weltpixel) zeichnen */
+  /** Detailblock in Auflösung res (Pixel pro Weltpixel) zeichnen */
   function renderChunk(cx, cy, res, reuse) {
-    const G = R.G;
-    const x0 = cx * CH, y0 = cy * CH, x1 = Math.min(G.W - 1, x0 + CH - 1), y1 = Math.min(G.H - 1, y0 + CH - 1);
-    const w = Math.ceil((x1 - x0 + 1) * TS * res) + CM * 2, h = Math.ceil((y1 - y0 + 1) * TS * res) + CM * 2;
-    const cv = reuse && reuse.width === w && reuse.height === h ? reuse : document.createElement('canvas');
+    const Bk = makeBlock('d', cx, cy, CH, BP);
+    Bk.terr = terrainImage(Bk, S.PX);
+    const w = Math.ceil(CH * TS * res) + CM * 2, h = w;
+    const cv = reuse && reuse.width === w ? reuse : document.createElement('canvas');
     if (cv !== reuse) { cv.width = w; cv.height = h; }
     const c = cv.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, w, h);
-    c.setTransform(res, 0, 0, res, CM - x0 * TS * res, CM - y0 * TS * res);
-    // Rand mitzeichnen: Bereich um eine Kachel erweitert, dann auf den Block plus Rand beschneiden
-    paintRegion(c, Math.max(0, x0 - 1), Math.max(0, y0 - 1), Math.min(G.W - 1, x1 + 1), Math.min(G.H - 1, y1 + 1));
-    return { cv, x0, y0, x1, y1, w, h };
+    c.setTransform(res, 0, 0, res, CM - BP * TS * res, CM - BP * TS * res);
+    paintBlock(c, Bk);
+    return { cv, w, h };
   }
 
-  function getChunk(cx, cy, res, allowRender) {
-    const key = cx + ',' + cy + ',' + res;
-    let e = R.chunks.get(key);
+  // ---------------- Übersichtsblock (weit herausgezoomt) ----------------
+  const OVR = 8; // Pixel pro Feld
+  const OV_URBAN = { 2: [143, 163, 182], 3: [138, 127, 116], 4: [232, 178, 58] };
+  function renderOverview(cx, cy) {
+    const P = 1;
+    const Bk = makeBlock('o', cx, cy, OCH, P);
+    const { W, H, t } = Bk;
+    const small = terrainImage(Bk, 4);
+    const size = OCH * OVR + CM * 2;
+    const cv = document.createElement('canvas');
+    cv.width = size; cv.height = size;
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.setTransform(1, 0, 0, 1, CM - P * OVR, CM - P * OVR);
+    c.drawImage(small, 0, 0, W * OVR, H * OVR);
+    // Städte und Straßen scharf darüber
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const id = y * W + x, bl = t.bld[id];
+      const city = Bk.cities[t.city[id] - 1];
+      if (!bl) {
+        // Stadtstraßen als Pflaster
+        if (t.road[id] && city) { c.fillStyle = '#b9b2a6'; c.fillRect(x * OVR, y * OVR, OVR, OVR); }
+        continue;
+      }
+      c.fillStyle = bl === S.U.R ? (city ? S.STYLES[city.style].roof : '#b5533a') : bl === S.U.HALL ? '#e8b23a' : bl === S.U.C ? '#8fa3b6' : bl === S.U.I ? '#8a7f74' : bl === 10 ? '#d8c25a' : '#5d5248';
+      c.fillRect(x * OVR + 0.8, y * OVR + 0.8, OVR - 1.6, OVR - 1.6);
+    }
+    c.strokeStyle = '#6f6a62'; c.lineWidth = 2; c.lineCap = 'round';
+    c.beginPath();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const id = y * W + x;
+      if (!(t.road[id] & 1) || t.city[id] && !t.bld[id] && Bk.cities[t.city[id] - 1] && Bk.cities[t.city[id] - 1].foreign) continue;
+      for (const [ox, oy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+        const nx = x + ox, ny = y + oy;
+        if (nx >= W || ny < 0 || ny >= H || !(t.road[ny * W + nx] & 1)) continue;
+        if (ox && oy && ((t.road[y * W + nx] & 1) || (t.road[ny * W + x] & 1))) continue;
+        c.moveTo((x + 0.5) * OVR, (y + 0.5) * OVR); c.lineTo((nx + 0.5) * OVR, (ny + 0.5) * OVR);
+      }
+    }
+    c.stroke();
+    c.strokeStyle = '#3f86b8'; c.lineWidth = 2.4;
+    c.beginPath();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const id = y * W + x;
+      if (!t.river[id] || t.rdir[id] < 0) continue;
+      const [ox, oy] = S.N4[t.rdir[id]];
+      c.moveTo((x + 0.5) * OVR, (y + 0.5) * OVR); c.lineTo((x + ox + 0.5) * OVR, (y + oy + 0.5) * OVR);
+    }
+    c.stroke();
+    drawBorders(c, Bk, 0, 0, W - 1, H - 1, OVR, { w: 2.4, dash: [7, 5] });
+    return { cv, w: size, h: size };
+  }
+  const _hex = {};
+  function hexRgb(h) { return _hex[h] || (_hex[h] = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]); }
+
+  function getChunk(map, key, make, allowRender) {
+    let e = map.get(key);
     if (e && !e.stale) { e.used = R.frame; return e; }
     if (!allowRender) return null;
-    const r = renderChunk(cx, cy, res, e && e.cv);
-    if (!e) { e = { cx, cy, res }; R.chunks.set(key, e); }
-    else R.pix -= e.w * e.h;
+    const t0 = performance.now();
+    const r = make(e && e.cv);
+    R.stats.renders++; R.stats.ms += performance.now() - t0;
+    if (!e) { e = {}; map.set(key, e); } else R.pix -= e.w * e.h;
     Object.assign(e, r, { stale: false, used: R.frame });
     R.pix += e.w * e.h;
     evict();
     return e;
   }
-
   function evict() {
     if (R.pix <= PIX_BUDGET) return;
-    const list = [...R.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
-    for (const [k, e] of list) {
-      if (R.pix <= PIX_BUDGET * 0.8 || e.used >= R.frame) break;
+    const all = [];
+    for (const m of [R.chunks, R.ochunks]) for (const [k, e] of m) all.push([m, k, e]);
+    all.sort((a, b) => a[2].used - b[2].used);
+    for (const [m, k, e] of all) {
+      // nur Blöcke verwerfen, die seit einigen Bildern nicht mehr gezeigt wurden
+      if (R.pix <= PIX_BUDGET * 0.8 || e.used >= R.frame - 3) break;
       R.pix -= e.w * e.h;
-      R.chunks.delete(k);
+      m.delete(k);
     }
   }
 
-  // ---------------- Übersichtskarte (weit herausgezoomt) ----------------
-  const OV_URBAN = { 2: '#8fa3b6', 3: '#8a7f74', 4: '#e8b23a' };
-  function paintOverview(x0, y0, x1, y1) {
-    const G = R.G, t = G.t, W = G.W, c = R.octx;
-    c.save();
-    c.beginPath(); c.rect(x0 * OV, y0 * OV, (x1 - x0 + 1) * OV, (y1 - y0 + 1) * OV); c.clip();
-    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-    const sx0 = Math.max(0, x0 - 1), sy0 = Math.max(0, y0 - 1), sx1 = Math.min(W, x1 + 2), sy1 = Math.min(G.H, y1 + 2);
-    c.drawImage(R.terr, sx0 * PX, sy0 * PX, (sx1 - sx0) * PX, (sy1 - sy0) * PX, sx0 * OV, sy0 * OV, (sx1 - sx0) * OV, (sy1 - sy0) * OV);
-    const ex0 = Math.max(0, x0 - 1), ey0 = Math.max(0, y0 - 1), ex1 = Math.min(W - 1, x1 + 1), ey1 = Math.min(G.H - 1, y1 + 1);
-    c.lineCap = 'round';
-    // Flüsse
-    c.strokeStyle = '#3f86b8'; c.lineWidth = 2;
-    c.beginPath();
-    for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
-      const id = y * W + x;
-      if (!t.river[id] || t.rdir[id] < 0) continue;
-      const [ox, oy] = S.N4[t.rdir[id]];
-      c.moveTo((x + 0.5) * OV, (y + 0.5) * OV); c.lineTo((x + ox + 0.5) * OV, (y + oy + 0.5) * OV);
-    }
-    c.stroke();
-    for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
-      const id = y * W + x, b = t.bld[id];
-      if (!b) continue;
-      if (b === U.R) {
-        const city = G.cities[t.city[id] - 1];
-        c.fillStyle = city ? S.STYLES[city.style].roof : '#b5533a';
-        c.fillRect(x * OV + 0.5, y * OV + 0.5, OV - 1, OV - 1);
-        if (t.lvl[id] >= 3) { c.fillStyle = 'rgba(0,0,0,' + (t.lvl[id] * 0.06).toFixed(2) + ')'; c.fillRect(x * OV + 2, y * OV + 2, OV - 4, OV - 4); }
-      } else if (b <= 4) {
-        c.fillStyle = OV_URBAN[b]; c.fillRect(x * OV + 0.5, y * OV + 0.5, OV - 1, OV - 1);
-      } else {
-        const d = S.BLD[b];
-        c.fillStyle = b === 10 ? '#d8c25a' : b === 32 ? '#6fae55' : d.cat === 'energie' ? '#3b3e4a' : d.cat === 'gesellschaft' ? '#e9e2d0' : '#7a5a44';
-        c.fillRect(x * OV + 1, y * OV + 1, OV - 2, OV - 2);
-      }
-    }
-    // Straßen und Bahn
-    for (const [bit, col, w] of [[1, '#6f6a62', 2], [2, '#2e2b29', 1.5]]) {
-      c.strokeStyle = col; c.lineWidth = w;
-      c.beginPath();
-      for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
-        const id = y * W + x;
-        if (!(t.road[id] & bit)) continue;
-        let any = false;
-        for (const [ox, oy] of S.N8) {
-          const nx = x + ox, ny = y + oy;
-          if (!S.inb(G, nx, ny) || !(t.road[ny * W + nx] & bit)) continue;
-          if (ox && oy && ((t.road[y * W + nx] & bit) || (t.road[ny * W + x] & bit))) continue;
-          c.moveTo((x + 0.5) * OV, (y + 0.5) * OV); c.lineTo((x + 0.5 + ox * 0.5) * OV, (y + 0.5 + oy * 0.5) * OV);
-          any = true;
+  // ---------------- Grobe Weltkarte (ganz weit draußen, flach) ----------------
+  function worldTexture() {
+    if (R.wtex) return R.wtex;
+    const N = 1024;
+    const cv = document.createElement('canvas');
+    cv.width = N; cv.height = N;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(N, N), d = img.data;
+    const co = World.coarse;
+    const nz = S.makeNoise(97);
+    for (let y = 0; y < N; y++) {
+      const lat = World.invMercY(Math.PI - (y + 0.5) / N * 2 * Math.PI), alat = Math.abs(lat);
+      const tb = S.clamp(1.0 - Math.pow(alat / 80, 1.6), 0, 1);
+      const dry = 0.46 * Math.exp(-Math.pow((alat - 25) / 9, 2)), wet = 0.18 * Math.exp(-Math.pow(alat / 11, 2));
+      for (let x = 0; x < N; x++) {
+        const lon = (x + 0.5) / N * 360 - 180;
+        const fx = (lon + 180) / 0.5 - 0.5, fy = (85 - lat) / 0.5 - 0.5;
+        const i0 = Math.max(0, Math.min(719, Math.round(fx))), j0 = Math.max(0, Math.min(339, Math.round(fy)));
+        const land = alat < 85 && co.land[j0 * 720 + i0];
+        let r, g, b;
+        const n = nz(x * 0.04, y * 0.04);
+        if (!land) {
+          const dep = S.clamp(World.distLandKm(lon, lat) / 300, 0, 1);
+          r = 62 - 40 * dep; g = 134 - 72 * dep; b = 176 - 68 * dep;
+        } else {
+          const dsk = World.distSeaKm(lon, lat);
+          const m = S.clamp(0.25 + n * 0.55 - dry + wet + Math.max(0, 1 - dsk / 500) * 0.18 - Math.min(1, dsk / 1600) * 0.22, 0, 1);
+          const e = 0.12 + Math.min(1, dsk / 400) * 0.12;
+          const col = S.BIOME_RGB[S.biomeOf(e, m, tb, m > 0.55 && tb > 0.2 ? 1 : 0, 0)];
+          r = col[0]; g = col[1]; b = col[2];
         }
-        if (!any) { c.moveTo((x + 0.3) * OV, (y + 0.5) * OV); c.lineTo((x + 0.7) * OV, (y + 0.5) * OV); }
+        const o = (y * N + x) * 4;
+        d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
       }
-      c.stroke();
     }
-    c.strokeStyle = 'rgba(70,40,30,0.6)'; c.lineWidth = 1.5; c.setLineDash([4, 3]);
-    c.beginPath();
-    for (const s of R.border) {
-      if (s[2] < ex0 || s[0] > ex1 + 1 || s[3] < ey0 || s[1] > ey1 + 1) continue;
-      c.moveTo(s[0] * OV, s[1] * OV); c.lineTo(s[2] * OV, s[3] * OV);
-    }
-    c.stroke(); c.setLineDash([]);
-    c.restore();
+    ctx.putImageData(img, 0, 0);
+    R.wtex = cv;
+    return cv;
+  }
+
+  // ---------------- Politische Karte (Länderflächen, flach) ----------------
+  function politicalPaths() {
+    if (R.ppaths) return R.ppaths;
+    const twoPi = 2 * Math.PI;
+    R.ppaths = S.WORLD.map((c, i) => {
+      const p = new Path2D();
+      for (const r of c.r) {
+        for (let k = 0; k < r.length; k += 2) {
+          const x = (r[k] / 100 + 180) / 360, y = (Math.PI - World.mercY(r[k + 1] / 100)) / twoPi;
+          if (k === 0) p.moveTo(x, y); else p.lineTo(x, y);
+        }
+        p.closePath();
+      }
+      const it = R.globe && R.globe.items[i];
+      return { p, idx: i + 1, color: it ? it.color : '#c9b98f', item: it };
+    });
+    return R.ppaths;
   }
 
   // ---------------- Boden ----------------
@@ -501,8 +621,7 @@
     }
     if (t.road[id]) return;
     const bio = t.biome[id];
-    const foreign = t.region[id] === 2;
-    if (foreign) c.globalAlpha = 0.42;
+    const foreign = false;
     if (t.forest[id] && t.elev[id] >= 0) {
       const kind = bio === B.TAIGA ? 'conifer' : bio === B.JUNGLE ? 'jungle' : 'leaf';
       const n = kind === 'jungle' ? 4 : 5;
@@ -531,7 +650,6 @@
         c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx - 1, hy - 4); c.moveTo(hx, hy); c.lineTo(hx + 1.5, hy - 3.5); c.stroke();
       }
     }
-    c.globalAlpha = 1;
     const res = t.res[id];
     if (res && t.elev[id] >= 0 && !foreign) drawResource(c, X + TS - 8, Y + TS - 7, res);
   }
@@ -939,36 +1057,45 @@
 
   // ---------------- Bildaufbau pro Frame ----------------
   R.MAX_Z = 4;
-  R.minZoom = () => Math.min(Math.min(R.cw / (R.G.W * TS), R.ch / (R.G.H * TS)) * 0.8, 0.3);
+  /** kleinster Zoom: der Globus schrumpft auf ein Drittel des Bildschirms */
+  R.minZoom = () => R.zForGlobeR(md() * 0.32);
   R.worldToScreen = (wx, wy) => [(wx - R.cam.x) * R.cam.z + R.cw / 2, (wy - R.cam.y) * R.cam.z + R.ch / 2];
   R.screenToWorld = (sx, sy) => [(sx - R.cw / 2) / R.cam.z + R.cam.x, (sy - R.ch / 2) / R.cam.z + R.cam.y];
   R.screenToTile = (sx, sy) => { const [wx, wy] = R.screenToWorld(sx, sy); return [Math.floor(wx / TS), Math.floor(wy / TS)]; };
 
   R.clampCam = function () {
-    const G = R.G, cam = R.cam;
-    const minZ = Math.min(R.cw / (G.W * TS), R.ch / (G.H * TS)) * 0.8;
-    cam.z = S.clamp(cam.z, Math.min(minZ, 0.3), R.MAX_Z);
-    const ax = (size, view) => {
-      const half = view / 2 / cam.z;
-      if (size <= 2 * half) return [size / 2 - (half - size / 2) * 0.5, size / 2 + (half - size / 2) * 0.5];
-      const m = half * 0.25;
-      return [half - m, size - half + m];
-    };
-    const [x0, x1] = ax(G.W * TS, R.cw), [y0, y1] = ax(G.H * TS, R.ch);
-    cam.x = S.clamp(cam.x, x0, x1);
-    cam.y = S.clamp(cam.y, y0, y1);
+    const G = R.G, cam = R.cam, WT = World.WT;
+    cam.y = S.clamp(cam.y, (World.gyOf(80) - G.gy0) * TS, (World.gyOf(-80) - G.gy0) * TS);
+    cam.z = S.clamp(cam.z, R.minZoom(), R.MAX_Z);
+    // Länge läuft um die Erde herum
+    const mid = G.W * TS / 2, span = WT * TS;
+    while (cam.x - mid > span / 2) cam.x -= span;
+    while (cam.x - mid < -span / 2) cam.x += span;
   };
 
   R.fit = function () {
     const G = R.G;
-    R.cam.z = Math.min(R.cw / (G.W * TS), R.ch / (G.H * TS)) * 0.95;
     R.cam.x = G.W * TS / 2; R.cam.y = G.H * TS / 2;
+    R.cam.z = Math.min(R.cw / (G.W * TS), R.ch / (G.H * TS)) * 0.95;
+  };
+  R.fitZoom = () => Math.min(R.cw / (R.G.W * TS), R.ch / (R.G.H * TS)) * 0.95;
+
+  /** Weicher Kameraflug auf eine Zoomstufe (Mitte bleibt) */
+  R.flyTo = function (x, y, z1, ms) {
+    R.zoomAnim = { z0: R.cam.z, z1, x0: R.cam.x, y0: R.cam.y, x1: x, y1: y, t: 0, ms: ms || 1200, fly: true };
   };
 
   R.centerOn = function (x, y, z) {
     R.cam.x = (x + 0.5) * TS; R.cam.y = (y + 0.5) * TS;
     if (z) R.cam.z = z;
     R.clampCam();
+  };
+
+  /** Bildschirmpunkt -> [lon, lat] (auch in der Globus-Ansicht) */
+  R.pickLonLat = function (sx, sy) {
+    if (R.flatA < 0.5) return R.globe.unproject(sx, sy);
+    const [wx, wy] = R.screenToWorld(sx, sy);
+    return [World.lonOfGx(wx / TS + R.G.gx0), World.latOfGy(wy / TS + R.G.gy0)];
   };
 
   const VIEW_FN = {
@@ -1016,80 +1143,124 @@
     c.putImageData(img, 0, 0);
   }
 
+  /** Bildausschnitt eines großen Bildes zeichnen, das die Weltfläche (x, y, w, h) bedeckt */
+  function drawPart(c, img, x, y, w, h, vx0, vy0, vx1, vy1) {
+    const ix0 = Math.max(x, vx0), iy0 = Math.max(y, vy0), ix1 = Math.min(x + w, vx1), iy1 = Math.min(y + h, vy1);
+    if (ix1 <= ix0 || iy1 <= iy0) return;
+    const sx = img.width / w, sy = img.height / h;
+    const s0x = (ix0 - x) * sx, s0y = (iy0 - y) * sy, s1x = (ix1 - x) * sx, s1y = (iy1 - y) * sy;
+    // mindestens ein Quellpixel, sonst verschwindet das Bild bei starkem Zoom
+    const pw = Math.max(1, s1x - s0x), ph = Math.max(1, s1y - s0y);
+    c.drawImage(img, s0x, s0y, pw, ph, ix0, iy0, pw / sx, ph / sy);
+  }
+
   R.draw = function (time) {
-    const G = R.G, c = R.ctx, cam = R.cam, z = cam.z;
+    const G = R.G, c = R.ctx, cam = R.cam;
     if (!G) return;
     R.frame++;
     R.flush();
-    c.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
-    c.fillStyle = '#16283a';
-    c.fillRect(0, 0, R.cw, R.ch);
-    c.setTransform(R.dpr * z, 0, 0, R.dpr * z, R.dpr * (R.cw / 2 - cam.x * z), R.dpr * (R.ch / 2 - cam.y * z));
-    c.imageSmoothingEnabled = true;
-    c.imageSmoothingQuality = 'high';
-    c.fillStyle = 'rgba(0,0,0,0.35)';
-    c.fillRect(6 / z, 8 / z, G.W * TS, G.H * TS);
-    // sichtbarer Ausschnitt in Kacheln
-    const [wx0, wy0] = R.screenToWorld(0, 0), [wx1, wy1] = R.screenToWorld(R.cw, R.ch);
-    const x0 = Math.max(0, Math.floor(wx0 / TS) - 1), y0 = Math.max(0, Math.floor(wy0 / TS) - 1);
-    const x1 = Math.min(G.W - 1, Math.ceil(wx1 / TS) + 1), y1 = Math.min(G.H - 1, Math.ceil(wy1 / TS) + 2);
-    const need = z * R.dpr;
-    const ovRes = OV / TS;
-    // Übersicht immer als Grundlage (verdeckt Lücken, solange Blöcke entstehen)
-    c.drawImage(R.ov, 0, 0, G.W * TS, G.H * TS);
-    if (need > ovRes * 1.3) {
-      const res = need <= 0.6 ? 0.5 : need <= 1.2 ? 1 : need <= 2.4 ? 2 : need <= 3.4 ? 3 : 4;
-      const cx0 = Math.floor(x0 / CH), cx1 = Math.floor(x1 / CH), cy0 = Math.floor(y0 / CH), cy1 = Math.floor(y1 / CH);
-      let budget = 3;
-      const ccx = (cam.x / TS) / CH, ccy = (cam.y / TS) / CH;
-      const order = [];
-      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) order.push([cx, cy, Math.hypot(cx + 0.5 - ccx, cy + 0.5 - ccy)]);
-      order.sort((a, b) => a[2] - b[2]);
-      for (const [cx, cy] of order) {
-        let e = getChunk(cx, cy, res, false);
-        if (!e && budget > 0) { e = getChunk(cx, cy, res, true); budget--; }
+    const z = cam.z, dpr = R.dpr, WT = World.WT, span = WT * TS;
+    const gr = R.globeR(), m = md();
+    const flatA = S.clamp((gr / m - R.GLOBE_FULL) / (R.GLOBE_FLAT - R.GLOBE_FULL), 0, 1);
+    const ppt = z * TS * dpr;
+    R.flatA = flatA; R.ppt = ppt;
+    // 1) Globus (weit draußen)
+    if (flatA < 1) {
+      const g = R.globe;
+      g.lon = R.camLon(); g.lat = R.camLat(); g.zoom = gr / g.baseR;
+      g.vLon = 0; g.vLat = 0; g.anim = null;
+      g.draw(time);
+    }
+    if (flatA <= 0) return;
+    // 2) flache Weltkarte
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.globalAlpha = flatA;
+    if (flatA >= 1) { c.fillStyle = '#0f2133'; c.fillRect(0, 0, R.cw, R.ch); }
+    c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (R.cw / 2 - cam.x * z), dpr * (R.ch / 2 - cam.y * z));
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    const [vx0, vy0] = R.screenToWorld(0, 0), [vx1, vy1] = R.screenToWorld(R.cw, R.ch);
+    const tex = worldTexture();
+    const ty = -G.gy0 * TS;
+    for (const k of [-1, 0, 1]) drawPart(c, tex, -G.gx0 * TS + k * span, ty, span, span, vx0, vy0, vx1, vy1);
+    // globale Feldbereiche
+    const gA = vx0 / TS + G.gx0, gB = vx1 / TS + G.gx0, hA = Math.max(0, vy0 / TS + G.gy0), hB = Math.min(WT - 1, vy1 / TS + G.gy0);
+    const centerG = [R.camGX(), R.camGY()];
+    const drawChunks = (map, size, alpha, budget, keyOf, make, res, srcPx) => {
+      const list = [];
+      for (let cy = Math.floor(hA / size); cy <= Math.floor(hB / size); cy++) for (let cx = Math.floor(gA / size); cx <= Math.floor(gB / size); cx++) {
+        list.push([cx, cy, Math.hypot(cx * size + size / 2 - centerG[0], cy * size + size / 2 - centerG[1])]);
+      }
+      list.sort((a, b) => a[2] - b[2]);
+      let missing = 0;
+      c.globalAlpha = flatA * alpha;
+      // bilinear statt „high“: Blöcke liegen schon fast in Bildschirmauflösung vor
+      c.imageSmoothingQuality = 'low';
+      for (const [cx, cy] of list) {
+        const wcx = wrapC(cx, WT / size);
+        const key = keyOf(wcx, cy, res);
+        let e = getChunk(map, key, null, false);
+        if (!e && budget > 0) { e = getChunk(map, key, (reuse) => make(wcx, cy, res, reuse), true); budget--; }
         if (!e) {
-          // Ersatz: andere Auflösung oder veraltete Fassung
-          for (const r2 of [res, 2, 1, 4, 3, 0.5]) { const f = R.chunks.get(cx + ',' + cy + ',' + r2); if (f) { e = f; f.used = R.frame; break; } }
+          missing++;
+          for (const r2 of [res, 2, 1, 4, 3]) { const f = map.get(keyOf(wcx, cy, r2)); if (f) { e = f; f.used = R.frame; break; } }
         }
         if (!e) continue;
-        const r = e.res, iw = (e.x1 - e.x0 + 1) * TS, ih = (e.y1 - e.y0 + 1) * TS;
-        const ex = 1 / need;
-        c.drawImage(e.cv, CM, CM, Math.min(e.w - CM, iw * r + ex * r), Math.min(e.h - CM, ih * r + ex * r), e.x0 * TS, e.y0 * TS, iw + ex, ih + ex);
+        const wx = (cx * size - G.gx0) * TS, wy = (cy * size - G.gy0) * TS, ws = size * TS;
+        const sp = srcPx(e), ex = 1 / (z * dpr);
+        c.drawImage(e.cv, CM, CM, sp + ex * sp / ws, sp + ex * sp / ws, wx, wy, ws + ex, ws + ex);
       }
-      if (budget <= 0 || [...R.chunks.values()].some(e => e.stale && e.used >= R.frame - 1)) R.needsMore = true;
+      return missing;
+    };
+    // 3) politische Flächen weit draußen
+    const polA = ppt < 1 ? 0.62 : Math.max(0, 0.62 * (1 - (ppt - 1) / 4));
+    if (ppt < 9) drawPolitical(c, G, z, dpr, polA, ppt, vx0, vy0, vx1, vy1);
+    // 4) Übersicht: Gelände, Städte, Straßen je Feld
+    if (ppt >= 3.2) {
+      const oA = S.clamp((ppt - 3.2) / 2, 0, 1);
+      drawChunks(R.ochunks, OCH, oA, 2, (x, y) => x + ',' + y, (x, y) => renderOverview(x, y), 0, () => OCH * OVR);
     }
-    // Datenansicht
-    if (VIEW_FN[R.view]) {
-      viewLayer(G);
-      c.imageSmoothingEnabled = false;
-      c.drawImage(R.viewCv, 0, 0, G.W * TS, G.H * TS);
-      c.imageSmoothingEnabled = true;
+    // 5) Details: Häuser, Bäume, Straßen
+    const need = z * dpr;
+    if (need >= 0.62) {
+      const res = need <= 1.2 ? 1 : need <= 2.4 ? 2 : need <= 3.4 ? 3 : 4;
+      const dA = S.clamp((need - 0.62) / 0.22, 0, 1);
+      drawChunks(R.chunks, CH, dA, 3, (x, y, r) => x + ',' + y + ',' + r, (x, y, r, reuse) => renderChunk(x, y, r, reuse), res, (e) => (e.w - CM * 2));
     }
-    // Rauch und Dampf
-    if (z > 0.55 && !R.reduceMotion) drawSmoke(c, G, x0, y0, x1, y1, time);
-    // Auswahl und Vorschau
-    if (R.sel) {
-      c.strokeStyle = '#ffffff'; c.lineWidth = 2 / z;
-      c.strokeRect(R.sel[0] * TS + 1, R.sel[1] * TS + 1, TS - 2, TS - 2);
-    }
-    if (R.preview) {
-      const p = R.preview;
-      for (const tile of p.tiles) {
-        c.fillStyle = tile.ok ? 'rgba(120,230,140,0.38)' : 'rgba(240,80,70,0.42)';
-        c.fillRect(tile.x * TS, tile.y * TS, TS, TS);
+    c.imageSmoothingQuality = 'high';
+    c.globalAlpha = flatA;
+    // 6) eigenes Land: Datenansicht, Rauch, Auswahl
+    const x0 = Math.max(0, Math.floor(vx0 / TS) - 1), y0 = Math.max(0, Math.floor(vy0 / TS) - 1);
+    const x1 = Math.min(G.W - 1, Math.ceil(vx1 / TS) + 1), y1 = Math.min(G.H - 1, Math.ceil(vy1 / TS) + 2);
+    if (ppt >= 3) {
+      if (VIEW_FN[R.view]) {
+        viewLayer(G);
+        c.imageSmoothingEnabled = false;
+        c.drawImage(R.viewCv, 0, 0, G.W * TS, G.H * TS);
+        c.imageSmoothingEnabled = true;
       }
-      if (p.radius) {
-        c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 1.5 / z; c.setLineDash([6 / z, 5 / z]);
-        c.beginPath(); c.arc((p.tiles[0].x + 0.5) * TS, (p.tiles[0].y + 0.5) * TS, p.radius * TS, 0, Math.PI * 2); c.stroke();
-        c.setLineDash([]);
+      if (z > 0.55 && !R.reduceMotion) drawSmoke(c, G, x0, y0, x1, y1, time);
+      if (R.sel) {
+        c.strokeStyle = '#ffffff'; c.lineWidth = 2 / z;
+        c.strokeRect(R.sel[0] * TS + 1, R.sel[1] * TS + 1, TS - 2, TS - 2);
       }
-    } else if (R.hover) {
-      c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 1.5 / z;
-      c.strokeRect(R.hover[0] * TS + 0.5, R.hover[1] * TS + 0.5, TS - 1, TS - 1);
+      if (R.preview) {
+        const p = R.preview;
+        for (const tile of p.tiles) {
+          c.fillStyle = tile.ok ? 'rgba(120,230,140,0.38)' : 'rgba(240,80,70,0.42)';
+          c.fillRect(tile.x * TS, tile.y * TS, TS, TS);
+        }
+        if (p.radius) {
+          c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 1.5 / z; c.setLineDash([6 / z, 5 / z]);
+          c.beginPath(); c.arc((p.tiles[0].x + 0.5) * TS, (p.tiles[0].y + 0.5) * TS, p.radius * TS, 0, Math.PI * 2); c.stroke();
+          c.setLineDash([]);
+        }
+      } else if (R.hover) {
+        c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 1.5 / z;
+        c.strokeRect(R.hover[0] * TS + 0.5, R.hover[1] * TS + 0.5, TS - 1, TS - 1);
+      }
     }
-    // Bildschirm-Ebene: Warnungen und Stadtnamen
-    c.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
+    // 7) Bildschirm-Ebene: Warnungen und Namen
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (z > 0.45) {
       for (const b of G.blds) {
         if (b.conn !== false || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
@@ -1100,8 +1271,98 @@
         c.fillText('!', sx, sy - 3.5);
       }
     }
-    drawLabels(c, G);
+    if (ppt < 7) drawCountryNames(c, G, ppt);
+    if (ppt >= 2.2) { drawForeignLabels(c, G, ppt, gA, gB, hA, hB); drawLabels(c, G); }
+    c.globalAlpha = 1;
   };
+
+  function drawPolitical(c, G, z, dpr, polA, ppt, vx0, vy0, vx1, vy1) {
+    const paths = politicalPaths();
+    const WT = World.WT, span = WT * TS, sc = z * TS * WT;
+    const base = c.globalAlpha;
+    for (const k of [-1, 0, 1]) {
+      const ox = (-G.gx0 * TS + k * span), oy = -G.gy0 * TS;
+      if (ox + span < vx0 || ox > vx1) continue;
+      c.save();
+      c.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (R.cw / 2 + (ox - R.cam.x) * z), dpr * (R.ch / 2 + (oy - R.cam.y) * z));
+      const nx0 = (vx0 - ox) / span, nx1 = (vx1 - ox) / span, ny0 = (vy0 - oy) / span, ny1 = (vy1 - oy) / span;
+      for (const p of paths) {
+        const b = p.nbox || (p.nbox = nbox(p.item));
+        if (b && (b[2] < nx0 || b[0] > nx1 || b[3] < ny0 || b[1] > ny1)) continue;
+        if (polA > 0.01) {
+          c.globalAlpha = base * polA;
+          c.fillStyle = p.idx === World.homeIdx ? '#e8b23a' : p.color;
+          c.fill(p.p);
+        }
+      }
+      c.globalAlpha = base * S.clamp(1.2 - ppt / 8, 0.2, 0.8);
+      c.lineWidth = 1 / sc; c.strokeStyle = 'rgba(30,40,50,0.9)';
+      for (const p of paths) {
+        const b = p.nbox;
+        if (b && (b[2] < nx0 || b[0] > nx1 || b[3] < ny0 || b[1] > ny1)) continue;
+        if (p.idx !== World.homeIdx) c.stroke(p.p);
+      }
+      const home = paths[World.homeIdx - 1];
+      if (home) { c.globalAlpha = base; c.lineWidth = 2.2 / sc; c.strokeStyle = '#f0c45a'; c.stroke(home.p); }
+      c.restore();
+    }
+    c.globalAlpha = base;
+  }
+  function nbox(it) {
+    if (!it) return null;
+    const [x0, y0, x1, y1] = it.box;
+    const twoPi = 2 * Math.PI;
+    return [(x0 + 180) / 360, (Math.PI - World.mercY(y1)) / twoPi, (x1 + 180) / 360, (Math.PI - World.mercY(y0)) / twoPi];
+  }
+
+  /** Bildschirmposition eines Längen-/Breitengrads, nächster Umlauf zur Kamera */
+  function lonLatToScreen(G, lon, lat) {
+    const WT = World.WT;
+    let gx = World.gxOf(lon);
+    const cgx = R.camGX();
+    while (gx - cgx > WT / 2) gx -= WT; while (gx - cgx < -WT / 2) gx += WT;
+    return R.worldToScreen((gx - G.gx0) * TS, (World.gyOf(lat) - G.gy0) * TS);
+  }
+
+  function drawCountryNames(c, G, ppt) {
+    const items = R.globe.items;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '700 12px "Big Shoulders Display", "Public Sans", system-ui, sans-serif';
+    const a = c.globalAlpha;
+    c.globalAlpha = a * S.clamp((7 - ppt) / 3, 0, 1);
+    for (const it of items) {
+      const [sx, sy] = lonLatToScreen(G, it.cLon, it.cLat);
+      if (sx < -60 || sy < -20 || sx > R.cw + 60 || sy > R.ch + 20) continue;
+      const w = (it.lbox[2] - it.lbox[0]) / 360 * World.WT * TS * R.cam.z;
+      if (w < 60) continue;
+      const home = it.c.id === G.meta.id;
+      c.fillStyle = home ? '#1a2633' : 'rgba(20,30,40,0.8)';
+      if (home) { c.font = '800 14px "Big Shoulders Display", "Public Sans", system-ui, sans-serif'; }
+      c.fillText(it.c.n.toUpperCase(), sx, sy);
+      if (home) c.font = '700 12px "Big Shoulders Display", "Public Sans", system-ui, sans-serif';
+    }
+    c.globalAlpha = a;
+  }
+
+  function drawForeignLabels(c, G, ppt, gA, gB, hA, hB) {
+    const near = World.citiesNear(Math.floor(gA), Math.floor(hA), Math.ceil(gB - gA) + 1, Math.ceil(hB - hA) + 1);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const { c: city, gx, gy } of near) {
+      if (city.cid === G.meta.id) continue;
+      if (ppt < 6 && !city.capital && city.pop < 2e6) continue;
+      if (ppt < 14 && !city.capital && city.pop < 4e5) continue;
+      const [sx, sy] = R.worldToScreen((gx - G.gx0) * TS, (gy - G.gy0 + 0.9) * TS);
+      if (sx < -80 || sy < -30 || sx > R.cw + 80 || sy > R.ch + 30) continue;
+      c.font = '600 11px "Big Shoulders Display", "Public Sans", system-ui, sans-serif';
+      const name = city.name.toUpperCase();
+      const w = c.measureText(name).width + 12;
+      c.fillStyle = 'rgba(245,240,228,0.85)';
+      roundRect(c, sx - w / 2, sy - 1, w, 17, 5); c.fill();
+      if (city.capital) { c.fillStyle = '#8a3b2c'; c.beginPath(); c.arc(sx - w / 2 + 5, sy + 7.5, 2.2, 0, Math.PI * 2); c.fill(); }
+      c.fillStyle = '#2b3440';
+      c.fillText(name, sx + (city.capital ? 2 : 0), sy + 8);
+    }
+  }
 
   function drawSmoke(c, G, x0, y0, x1, y1, time) {
     const t = G.t;

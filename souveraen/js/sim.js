@@ -549,6 +549,7 @@
       const c = G.cities[cid - 1];
       const b = t.bld[i], l = t.lvl[i];
       if (!b || !c) continue;
+      if (t.region[i] !== 1) continue; // besetzt
       const st = S.STYLES[c.style];
       if (b === U.R) { c.nR++; c.cap += S.CAP_R[l] * st.capMul; c.energy += l * 0.6; }
       else if (b === U.C) { c.nC++; c.jobs += S.JOBS_C[l]; c.energy += l * 1.3; c.goodsNeed += l * 1.2; c.commerce += S.JOBS_C[l]; }
@@ -634,7 +635,8 @@
     // --- Arbeit
     let pop = 0, jobs = 0;
     for (const c of G.cities) { pop += c.pop; jobs += c.jobs; }
-    for (const b of G.blds) jobs += S.BLD[b.b].jobs;
+    for (const b of G.blds) b.occ = t.region[S.idx(G, b.x, b.y)] !== 1;
+    for (const b of G.blds) if (!b.occ) jobs += S.BLD[b.b].jobs;
     const workforce = pop * 0.5;
     const laborRatio = Math.min(1, workforce / Math.max(1, jobs));
     const employment = Math.min(1, jobs / Math.max(1, workforce));
@@ -645,9 +647,8 @@
     for (const c of G.cities) eDem += c.energy;
     const outs = G.blds.map(b => {
       const o = S.buildingOutput(G, b);
-      const eff = (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod;
-      eDem += S.BLD[b.b].energy;
-      eProd += o.energy * (b.conn ? 1 : 0.4);
+      const eff = b.occ ? 0 : (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod;
+      if (!b.occ) { eDem += S.BLD[b.b].energy; eProd += o.energy * (b.conn ? 1 : 0.4); }
       return { o, eff, b };
     });
     const energyRatio = eDem > 0 ? Math.min(1, eProd / eDem) : 1;
@@ -678,9 +679,13 @@
     const P = S.PRICES;
     const bal = { food: food - foodNeed, raw: raw - rawUse, goods: goods - goodsNeed };
     let exports = 0, imports = 0;
+    // Krieg und Sanktionen stören den Handel
+    const nWars = G.mil ? Object.keys(G.mil.wars).length : 0;
+    const sanction = S.mod(G, 'sanction') > 0;
+    const warTrade = Math.max(0.4, 1 - nWars * 0.12) * (sanction ? 0.8 : 1);
     for (const k of ['food', 'raw', 'goods']) {
-      if (bal[k] >= 0) exports += bal[k] * P[k] * tradeMul * 0.75;
-      else imports += -bal[k] * P[k] * 1.3 * (1 - S.mod(G, 'importcut'));
+      if (bal[k] >= 0) exports += bal[k] * P[k] * tradeMul * 0.75 * warTrade;
+      else imports += -bal[k] * P[k] * 1.3 * (1 - S.mod(G, 'importcut')) * (sanction ? 1.2 : 1);
     }
     const foodShort = foodNeed > 0 ? Math.max(0, -bal.food / foodNeed) : 0;
 
@@ -715,10 +720,12 @@
     const servicesSum = services.edu + services.health + services.security + services.infra;
     const base = (eco.baseRate || 0) * pop / 1000;
     const other = Math.max(0, base), pensions = Math.max(0, -base);
-    const income = incomeTax + corpTax + exports + tourism + other;
-    const expense = servicesSum + upkeep + imports + interest + pensions;
+    const military = S.Mil ? S.Mil.upkeep(G) : 0;
+    const tribute = S.Mil ? S.Mil.tribute(G) : 0;
+    const income = incomeTax + corpTax + exports + tourism + other + tribute;
+    const expense = servicesSum + upkeep + imports + interest + pensions + military;
     const net = income - expense;
-    eco.money += net;
+    if (!G.continuous) eco.money += net; // sonst fließt das Geld laufend (siehe main.js)
     if (eco.money < -200) {
       // Notkredit
       const amt = 1000;
@@ -760,6 +767,7 @@
         'Stadion & Wahrzeichen': Math.min(10, c.stad * 6 + c.monu * 4 * mon),
         'Verkehrsanbindung': (c.connected ? 0 : -6) + (c.rail ? 2 : 0),
         'Wohnungsnot': -Math.max(0, c.pop / Math.max(1, c.cap) - 1) * 60,
+        'Krieg': S.Mil ? -S.Mil.weariness(G) : 0,
         'Ereignisse': S.mod(G, 'happy')
       };
       let h = 0;
@@ -796,7 +804,7 @@
     eco.last = {
       pop, jobs, workforce, employment, laborRatio, energyRatio, eProd, eDem,
       food, foodNeed, raw, rawUse, goods, goodsNeed, rawRatio: Math.min(1, rawRatio),
-      exports, imports, incomeTax, corpTax, tourism, other, pensions, services, upkeep, interest, income, expense, net,
+      exports, imports, incomeTax, corpTax, tourism, other, pensions, services, upkeep, interest, income, expense, net, military, tribute,
       tradeMul, gdp, foodShort, harbors, airports, roadTiles, railTiles
     };
     G.stats.push({ m: G.month, money: Math.round(eco.money), pop: Math.round(pop * G.popScale), app: Math.round(eco.approval), net: Math.round(net), gdp: Math.round(gdp) });
@@ -805,6 +813,7 @@
     // --- Ereignisse, Wahlen, Erfolge
     G.mods = G.mods.filter(m => (m.months === undefined) || --m.months > 0);
     G.month++;
+    if (S.Mil && G.mil) S.Mil.monthly(G);
     politics(G);
     S.checkAchievements(G);
     if (!G.pendingEvent && G.month > 4 && Math.random() < 0.07) S.rollEvent(G);
@@ -890,6 +899,7 @@
     }
   }
 
+  S.gameOver = (G, title, text) => gameOver(G, title, text);
   function gameOver(G, title, text) {
     G.flags.over = true;
     S.log(G, title + ': ' + text, 'bad');

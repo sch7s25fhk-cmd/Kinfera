@@ -6,7 +6,7 @@
   const esc = S.esc;
   const R = S.R;
 
-  const TABS = [['lage', 'Lage'], ['auswahl', 'Auswahl'], ['haushalt', 'Haushalt'], ['staedte', 'Städte'], ['chronik', 'Chronik']];
+  const TABS = [['lage', 'Lage'], ['auswahl', 'Auswahl'], ['haushalt', 'Haushalt'], ['militaer', 'Militär'], ['staedte', 'Städte'], ['chronik', 'Chronik']];
   const VIEWS = [['none', 'Gelände'], ['pop', 'Wohndichte'], ['happy', 'Zufriedenheit'], ['poll', 'Verschmutzung'], ['fert', 'Fruchtbarkeit'], ['res', 'Rohstoffe'], ['net', 'Verkehrsnetz']];
 
   // ======================= Aufbau =======================
@@ -127,7 +127,7 @@
   UI.refresh = function (full) {
     const G = UI.G;
     if (!G) return;
-    $('tbDate').textContent = S.dateStr(G.month);
+    $('tbDate').textContent = S.dateFull(G);
     const L = G.eco.last || {};
     const eco = G.eco;
     const net = L.net || 0;
@@ -332,6 +332,84 @@
         return '<section><h3>Erfolge</h3><div class="achs">' + S.ACHIEVEMENTS.map(a => '<div class="ach' + (G.ach[a.id] !== undefined ? ' on' : '') + '"><b>' + esc(a.name) + '</b><small>' + esc(a.desc) + '</small></div>').join('') + '</div></section>' +
           '<section><h3>Chronik</h3><ul class="log">' + (G.log.length ? G.log.map(l => '<li class="' + l.kind + '"><time>' + S.dateStr(l.m) + '</time><span>' + esc(l.text) + '</span></li>').join('') : '<li><time></time><span class="muted">Noch keine Ereignisse.</span></li>') + '</ul></section>';
       }
+    }
+  };
+
+  // ---------- Militär-Panel ----------
+  PANELS.militaer = {
+    build(G) {
+      if (!G.mil) return '<p class="muted">Kein Militär.</p>';
+      const M = S.Mil, mil = G.mil, home = S.World.homeIdx, now = mil.hours;
+      const st = M.armyStats(G);
+      let h = '<section><h3>Streitkräfte</h3><div class="kv">' +
+        '<span>Einheiten</span><span>' + st.count + '</span>' +
+        '<span>Soldaten</span><span>' + S.fmtPop(st.men) + '</span>' +
+        '<span>Unterhalt</span><span>' + S.fmtMoney(M.upkeep(G)) + '/Mon.</span>' +
+        '<span>Kriegsmüdigkeit</span><span>' + (M.weariness(G) ? '−' + Math.round(M.weariness(G)) + ' Zufriedenheit' : 'keine') + '</span></div></section>';
+      // Kriege
+      const wars = Object.entries(mil.wars);
+      h += '<section><h4>Kriege</h4>';
+      if (!wars.length) h += '<p class="muted">Frieden. Schicke Truppen über eine Grenze oder erkläre unten den Krieg, um Land zu erobern.</p>';
+      for (const [e, w] of wars) {
+        const days = Math.floor((now - w.since) / 24);
+        const sc = S.clamp(w.score, -100, 100);
+        const theirs = mil.units.filter(u => u.o === +e).length;
+        h += '<div class="war"><div class="war-head"><b>' + S.esc(M.countryName(+e)) + '</b><span>' + days + ' Tage · ' + (w.aggressor === 'player' ? 'dein Angriff' : 'Verteidigung') + '</span></div>' +
+          '<div class="bar"><span>Kriegslage</span><span class="track"><i style="' + (sc >= 0 ? 'left:50%;width:' + sc / 2 + '%;background:var(--good)' : 'right:50%;width:' + -sc / 2 + '%;background:var(--bad)') + '"></i></span><span>' + (sc > 0 ? '+' : '') + Math.round(sc) + '</span></div>' +
+          '<div class="kv"><span>Gefallene (eigene / Feind)</span><span>' + S.fmtPop(w.ownLoss) + ' / ' + S.fmtPop(w.enemyLoss) + '</span><span>Feindliche Einheiten</span><span>' + theirs + '</span></div>' +
+          '<div class="chips"><button class="chip" data-peace="' + e + '">Frieden anbieten</button></div></div>';
+      }
+      h += '</section>';
+      // Nachbarn
+      const neigh = M.neighbours(G).filter(e => !mil.wars[e]);
+      if (neigh.length) {
+        h += '<section><h4>Nachbarn</h4><div class="chips">' + neigh.map(e => '<button class="chip" data-war="' + e + '" title="Krieg erklären">' + S.esc(M.countryName(e)) + (mil.truce[e] > G.month ? ' · Waffenstillstand' : '') + '</button>').join('') + '</div><p class="muted">Antippen, um den Krieg zu erklären.</p></section>';
+      }
+      // Ausbildung
+      const bars = G.blds.filter(b => b.b === 18 && !b.occ);
+      h += '<section><h4>Ausbildung</h4>';
+      if (!bars.length) h += '<p class="muted">Baue zuerst eine Kaserne (unten „Militär“), dann kannst du hier Truppen ausbilden.</p>';
+      else {
+        if (!bars.includes(UI.barracks)) UI.barracks = bars[0];
+        if (bars.length > 1) h += '<div class="chips">' + bars.map((b, i) => { const c = S.nearestCity(G, b.x, b.y); return '<button class="chip" data-bar="' + i + '" aria-pressed="' + (b === UI.barracks) + '">Kaserne ' + S.esc(c ? c.name : '#' + (i + 1)) + '</button>'; }).join('') + '</div>';
+        h += '<div class="opts">' + M.TYPE_KEYS.map(k => {
+          const T = M.TYPES[k];
+          return '<button class="opt" data-rec="' + k + '"><span><b>' + T.name + ' · ' + S.fmtMoney(T.cost) + '</b><small>' + T.desc + ' Ausbildung ' + UI.realDur(T.hours) + ', Unterhalt ' + S.fmt1(T.upkeep) + '/Mon.</small></span></button>';
+        }).join('') + '</div>';
+      }
+      h += '</section>';
+      // Einheiten
+      const mine = mil.units.filter(u => u.o === home);
+      h += '<section><h4>Einheiten</h4><div class="citylist">' + (mine.length ? mine.map(u => {
+        const c = S.nearestCity(G, u.x - G.gx0, u.y - G.gy0);
+        return '<button class="cityrow" data-unit="' + u.id + '"><span class="dot" style="background:' + (u.fight || u.under ? 'var(--bad)' : u.path ? 'var(--brass)' : 'var(--good)') + '"></span><span><b>' + M.TYPES[u.type].name + '</b><small>' + unitStatus(G, u).replace(/<[^>]+>/g, '') + (c ? ' · bei ' + S.esc(c.name) : '') + '</small></span><span class="mono">' + Math.max(0, Math.round(u.hp)) + ' %</span></button>';
+      }).join('') : '<p class="muted">Keine Truppen.</p>') + '</div></section>';
+      // Besetzte Städte
+      const caps = Object.entries(mil.caps).filter(([, c]) => c.o === home);
+      if (caps.length) h += '<section><h4>Besetzte Städte</h4><div class="kv">' + caps.map(([k, c]) => '<span>' + S.esc(k.slice(k.indexOf(':') + 1)) + '</span><span>Widerstand ' + Math.round(c.res * 100) + ' %</span>').join('') + '</div><p class="muted">Besetzte Städte zahlen Abgaben. Ohne Truppen in der Nähe wächst der Widerstand bis zum Aufstand.</p></section>';
+      return h;
+    },
+    bind(G, root) {
+      root.querySelectorAll('[data-peace]').forEach(b => b.addEventListener('click', () => {
+        const ok = S.Mil.offerPeace(G, +b.dataset.peace);
+        UI.toast(ok ? 'Frieden geschlossen.' : 'Das Angebot wurde abgelehnt.', ok ? 'good' : 'warn');
+        UI.refresh(true);
+      }));
+      root.querySelectorAll('[data-war]').forEach(b => b.addEventListener('click', () => confirmWar([+b.dataset.war])));
+      root.querySelectorAll('[data-bar]').forEach(b => b.addEventListener('click', () => { UI.barracks = G.blds.filter(x => x.b === 18 && !x.occ)[+b.dataset.bar]; UI.renderPanel(true); }));
+      root.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => {
+        const r = S.Mil.recruit(G, b.dataset.rec, UI.barracks);
+        if (!r.ok) UI.toast(r.reason, 'warn');
+        else { UI.toast(S.Mil.TYPES[b.dataset.rec].name + ' wird ausgebildet – bereit in ' + UI.realDur(S.Mil.TYPES[b.dataset.rec].hours) + '.', 'good', 2400); vibrate(12); }
+        UI.refresh(true);
+      }));
+      root.querySelectorAll('[data-unit]').forEach(b => b.addEventListener('click', () => {
+        const u = G.mil.units.find(x => x.id === +b.dataset.unit);
+        if (!u) return;
+        closePanelMobile();
+        R.centerOn(u.x - G.gx0 - 0.5, u.y - G.gy0 - 0.5, Math.max(R.cam.z, 0.6));
+        UI.selectUnits([u.id]);
+      }));
     }
   };
 
@@ -623,13 +701,14 @@
     const ll = R.pickLonLat(sx, sy);
     if (!ll) return;
     const World = S.World;
-    const o = World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1]));
+    const o = G.mil ? S.Mil.owner(G, World.gxOf(ll[0]), World.gyOf(ll[1])) : World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1]));
     if (!o) { UI.toast('Offenes Meer · ' + S.fmt1(Math.abs(ll[1])) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + ', ' + S.fmt1(Math.abs(ll[0])) + '° ' + (ll[0] >= 0 ? 'O' : 'W'), 'info', 1800); return; }
     const c = S.WORLD[o - 1];
-    if (c.id === G.meta.id) { if (R.ppt < 3) flyHome(); else UI.toast(c.n + ' – dein Land (außerhalb des verwalteten Gebiets)', 'info', 2200); return; }
+    if (o === World.homeIdx) { if (R.ppt < 3) flyHome(); else UI.toast('Dein Staatsgebiet (außerhalb des verwalteten Kernlands)', 'info', 2200); return; }
     const near = World.citiesNear(Math.floor(World.gxOf(ll[0])) - 6, Math.floor(World.gyOf(ll[1])) - 6, 12, 12).filter(n => n.c.cid === c.id);
     const city = near.length ? near.sort((a, b) => Math.hypot(a.gx - World.gxOf(ll[0]), a.gy - World.gyOf(ll[1])) - Math.hypot(b.gx - World.gxOf(ll[0]), b.gy - World.gyOf(ll[1])))[0].c : null;
-    UI.toast(c.n + ' · ' + S.fmtPop(c.pop) + ' Einwohner' + (city && R.ppt >= 3 ? ' · bei ' + city.name : ''), 'info', 2400);
+    const war = G.mil && G.mil.wars[o] ? ' · im Krieg mit dir' : '';
+    UI.toast(c.n + ' · ' + S.fmtPop(c.pop) + ' Einwohner' + (city && R.ppt >= 3 ? ' · bei ' + city.name : '') + war, war ? 'bad' : 'info', 2400);
   }
 
   /** „Zu meinem Land“ zeigen, wenn das Land nicht im Bild ist */
@@ -729,9 +808,144 @@
     if (r.ok) UI.refreshTopOnly();
   }
 
+  // ======================= Militär: Auswahl und Befehle =======================
+  UI.selUnits = [];
+  UI.orderMode = false;
+  const myUnit = (u) => u && u.o === S.World.homeIdx;
+
+  UI.selectUnits = function (ids) {
+    UI.selUnits = ids; R.selUnits = ids; UI.orderMode = false;
+    syncPreview();
+  };
+
+  /** Echtzeit-Dauer für Spielstunden beim aktuellen Tempo */
+  UI.realDur = function (hours) {
+    const rate = (UI.RATE && UI.RATE[UI.speed || 1]) || 1 / 86400;
+    const sec = hours / 720 / rate;
+    if (sec < 90) return Math.round(sec) + ' s';
+    if (sec < 5400) return Math.round(sec / 60) + ' Min.';
+    return S.fmt1(sec / 3600) + ' Std.';
+  };
+
+  function unitIcon(u) {
+    const cv = document.createElement('canvas');
+    cv.width = 68; cv.height = 68;
+    const c = cv.getContext('2d');
+    c.scale(2, 2);
+    c.fillStyle = R.unitColor(u.o); c.fillRect(3, 7, 28, 19);
+    const ink = myUnit(u) ? '#1b2531' : '#fff';
+    c.strokeStyle = ink; c.lineWidth = 1.4; c.strokeRect(6, 10, 22, 13);
+    c.beginPath();
+    if (u.type === 'inf') { c.moveTo(6, 10); c.lineTo(28, 23); c.moveTo(28, 10); c.lineTo(6, 23); c.stroke(); }
+    else if (u.type === 'tank') { c.ellipse(17, 16.5, 7, 3.5, 0, 0, Math.PI * 2); c.stroke(); }
+    else { c.fillStyle = ink; c.arc(17, 16.5, 2.8, 0, Math.PI * 2); c.fill(); }
+    return cv;
+  }
+
+  function unitStatus(G, u) {
+    const now = G.mil.hours;
+    if (u.ready > now) return 'In Ausbildung – bereit in ' + UI.realDur(u.ready - now);
+    if (u.fight || u.under) return '<span class="err">Im Gefecht</span>';
+    if (u.path) { const t = u.path[u.path.length - 1]; return 'Marschiert – Ankunft in ca. ' + UI.realDur(S.Mil.etaHours(G, u, t[0], t[1])); }
+    return 'Bereit';
+  }
+
+  /** Aktionsleiste für ausgewählte Einheiten */
+  function unitBar() {
+    const G = UI.G;
+    const units = G.mil ? G.mil.units.filter(u => UI.selUnits.includes(u.id)) : [];
+    if (!units.length) { UI.selUnits = []; R.selUnits = []; return false; }
+    const u0 = units[0], T = S.Mil.TYPES[u0.type], own = myUnit(u0);
+    $('actionBar').hidden = false;
+    $('abIcon').innerHTML = ''; $('abIcon').appendChild(unitIcon(u0));
+    $('abName').textContent = units.length > 1 ? units.length + ' Einheiten' : (own ? '' : S.Mil.countryName(u0.o) + ' · ') + T.name;
+    let info;
+    if (UI.orderMode) info = '<b>Tippe auf das Marschziel.</b> Ein Ziel in einem fremden Land bedeutet Krieg.';
+    else if (units.length > 1) info = 'Ø Stärke ' + Math.round(units.reduce((s, u) => s + u.hp, 0) / units.length) + ' % · ' + units.filter(u => u.fight || u.under).length + ' im Gefecht';
+    else info = 'Stärke ' + Math.max(0, Math.round(u0.hp)) + ' % · ' + unitStatus(G, u0) + (own ? '' : '<br>' + T.desc);
+    $('abInfo').innerHTML = info;
+    const ok = $('abOk');
+    if (own && !UI.orderMode) {
+      $('abExtra').innerHTML = '<button class="btn btn-small" data-act="group">+ Truppen ringsum</button><button class="btn btn-small" data-act="halt">Halt</button>';
+      ok.hidden = false; ok.disabled = false; ok.textContent = 'Marschziel';
+    } else if (UI.orderMode) {
+      $('abExtra').innerHTML = '<button class="btn btn-small" data-act="cancelOrder">Abbrechen</button>';
+      ok.hidden = true;
+    } else { $('abExtra').innerHTML = ''; ok.hidden = true; }
+    return true;
+  }
+  UI.unitBar = unitBar;
+
+  function unitAction(act) {
+    const G = UI.G;
+    const sel = G.mil.units.filter(u => UI.selUnits.includes(u.id));
+    if (act === 'group' && sel[0]) {
+      const r = Math.max(3, 30 / S.Mil.kmAt(sel[0].y));
+      const ids = G.mil.units.filter(u => myUnit(u) && Math.hypot(u.x - sel[0].x, u.y - sel[0].y) <= r).map(u => u.id);
+      UI.selectUnits(ids);
+      UI.toast(ids.length + ' Einheiten ausgewählt.', 'info', 1400);
+    } else if (act === 'halt') { for (const u of sel) if (myUnit(u)) u.path = null; syncPreview(); }
+    else if (act === 'cancelOrder') { UI.orderMode = false; syncPreview(); }
+  }
+
+  /** Marschbefehl auf einen Bildschirmpunkt */
+  function orderTo(sx, sy) {
+    const G = UI.G;
+    if (R.flatA < 1) { UI.toast('Zoome näher heran, um ein Marschziel zu setzen.', 'warn'); return; }
+    const [gx, gy] = R.screenToG(sx, sy);
+    const units = G.mil.units.filter(u => UI.selUnits.includes(u.id) && myUnit(u));
+    if (!units.length) return;
+    const crossed = new Set();
+    for (const u of units) {
+      const chk = S.Mil.checkPath(G, u, gx, gy);
+      if (!chk.ok) { UI.toast(chk.reason, 'warn'); return; }
+      chk.crossed.forEach(o => crossed.add(o));
+    }
+    const go = () => {
+      S.Mil.order(G, units.map(u => u.id), gx, gy);
+      const eta = Math.max(...units.map(u => S.Mil.etaHours(G, u, gx, gy)));
+      UI.toast('Marschbefehl erteilt. Ankunft in ca. ' + UI.realDur(eta) + '.', 'good', 2200);
+      vibrate(12);
+      UI.orderMode = false; syncPreview(); UI.refresh();
+    };
+    if (crossed.size) confirmWar([...crossed], go);
+    else go();
+  }
+
+  /** Kriegserklärung bestätigen lassen */
+  function confirmWar(list, then) {
+    const G = UI.G;
+    const truce = list.filter(e => G.mil.truce[e] > G.month);
+    const names = list.map(e => S.Mil.countryName(e)).join(', ');
+    const army = list.reduce((s, e) => s + S.Mil.potential(e), 0);
+    openModal('<p class="eyebrow">Kriegserklärung</p><h2>Krieg gegen ' + S.esc(names) + '?</h2>' +
+      '<p class="lead">Deine Truppen würden die Grenze überschreiten. Das bedeutet Krieg.</p>' +
+      '<div class="kv"><span>Gegnerische Armee</span><span>ca. ' + army + ' Einheiten, Nachschub folgt</span>' +
+      '<span>Sanktionen (18 Monate)</span><span>Exporte −20 %, Importe +20 %</span>' +
+      '<span>Handel</span><span>−12 % je laufendem Krieg</span>' +
+      '<span>Zustimmung</span><span>sofort −4, dann Kriegsmüdigkeit</span></div>' +
+      (truce.length ? '<p class="muted">Achtung: Mit ' + S.esc(truce.map(e => S.Mil.countryName(e)).join(', ')) + ' gilt noch ein Waffenstillstand – ein Bruch schadet deinem Ansehen zusätzlich.</p>' : '') +
+      '<div class="row-end"><button class="btn btn-ghost" id="wNo">Abbrechen</button><button class="btn btn-primary" id="wYes">Krieg erklären</button></div>', (box) => {
+      box.querySelector('#wNo').addEventListener('click', () => closeModal());
+      box.querySelector('#wYes').addEventListener('click', () => {
+        for (const e of list) { if (G.mil.truce[e] > G.month) G.mods.push({ key: 'happy', val: -4, months: 6 }); S.Mil.declareWar(G, e, 'player'); }
+        closeModal();
+        if (then) then();
+        UI.refresh(true);
+      });
+    });
+  }
+  UI.confirmWar = confirmWar;
+
   // --- Antippen
   function tapAt(tx, ty, sx, sy) {
     const G = UI.G, tool = S.TOOLS[UI.tool];
+    if (tool.kind === 'inspect' && G.mil) {
+      if (UI.orderMode && UI.selUnits.length) { orderTo(sx, sy); return; }
+      const u = R.unitAt(sx, sy);
+      if (u) { UI.selectUnits([u.id]); vibrate(6); return; }
+      if (UI.selUnits.length) UI.selectUnits([]);
+    }
     if (R.flatA < 1 || !S.inb(G, tx, ty)) {
       if (tool.kind === 'inspect') tapWorld(sx, sy);
       else UI.toast('Dort kannst du nicht bauen: außerhalb deines Staatsgebiets.', 'warn', 2000);
@@ -760,7 +974,11 @@
   function syncPreview() {
     const G = UI.G, tool = S.TOOLS[UI.tool], p = UI.pending;
     const bar = $('actionBar');
-    if (tool.kind === 'inspect') { bar.hidden = true; R.preview = null; return; }
+    if (tool.kind === 'inspect') {
+      R.preview = null;
+      if (UI.selUnits.length && unitBar()) return;
+      bar.hidden = true; return;
+    }
     bar.hidden = false;
     let info = '', okBtn = null, okEnabled = false, extra = '';
     R.preview = null;
@@ -847,10 +1065,15 @@
   }
 
   function bindActionBar() {
-    $('abOk').addEventListener('click', confirmAction);
-    $('abDone').addEventListener('click', () => UI.selectTool('inspect'));
+    $('abOk').addEventListener('click', () => {
+      if (UI.tool === 'inspect' && UI.selUnits.length) { UI.orderMode = true; syncPreview(); return; }
+      confirmAction();
+    });
+    $('abDone').addEventListener('click', () => { if (UI.selUnits.length) UI.selectUnits([]); else UI.selectTool('inspect'); });
     $('abExtra').addEventListener('click', (e) => {
-      if (e.target.dataset.act === 'restart') { UI.pending = null; syncPreview(); }
+      const act = e.target.dataset.act;
+      if (act === 'restart') { UI.pending = null; syncPreview(); }
+      else if (act) unitAction(act);
     });
   }
 
@@ -992,10 +1215,26 @@
       '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
       '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
-      '<p><b>Zeit.</b> Ein Monat dauert 6 Sekunden, schneller geht es mit den Pfeilen oben. Pause hält alles an.</p>' +
+      '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
+      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen; wo sie vorrücken, verschiebt sich die Grenze. Städte fallen, wenn kein Verteidiger mehr in der Nähe ist. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });
+  };
+
+  UI.openAwayReport = function (G, a) {
+    const hrs = a.sec / 3600;
+    const dur = hrs < 1 ? Math.round(a.sec / 60) + ' Minuten' : hrs < 48 ? S.fmt1(hrs) + ' Stunden' : S.fmt1(hrs / 24) + ' Tage';
+    const days = Math.round(a.months * 30);
+    const wars = G.mil ? Object.keys(G.mil.wars).map(e => S.Mil.countryName(+e)) : [];
+    const news = a.news.slice(0, 12);
+    openModal('<p class="eyebrow">Lagebericht · ' + S.dateFull(G) + '</p><h2>Während du weg warst</h2>' +
+      '<p class="lead">' + dur + ' sind vergangen – im Land ' + (days >= 60 ? S.fmt1(a.months) + ' Monate' : days + ' Tage') + '.' + (a.capped ? ' (Mehr als ein Jahr holt das Spiel nicht nach.)' : '') + '</p>' +
+      '<div class="kv"><span>Staatskasse</span><span>' + S.fmtMoney(a.money, true) + '</span><span>Zustimmung</span><span>' + Math.round(G.eco.approval) + ' %</span><span>Kriege</span><span>' + (wars.length ? S.esc(wars.join(', ')) : 'keine') + '</span></div>' +
+      (news.length ? '<ul class="log">' + news.map(l => '<li class="' + l.kind + '"><time>' + S.dateStr(l.m) + '</time><span>' + S.esc(l.text) + '</span></li>').join('') + '</ul>' : '<p class="muted">Keine besonderen Vorkommnisse.</p>') +
+      '<div class="row-end"><button class="btn btn-primary" id="awOk">Weiterregieren</button></div>', (box) => {
+      box.querySelector('#awOk').addEventListener('click', () => closeModal());
+    }, { keepRunning: true });
   };
 
   UI.openBriefing = function (G) {

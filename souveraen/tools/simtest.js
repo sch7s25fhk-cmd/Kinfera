@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console, Math, Intl, Date, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (b) => Buffer.from(b, 'base64').toString('binary') };
 ctx.window = ctx; ctx.globalThis = ctx;
 vm.createContext(ctx);
-for (const f of ['data/world.js', 'util.js', 'defs.js', 'generate.js', 'world.js', 'sim.js'])
+for (const f of ['data/world.js', 'util.js', 'defs.js', 'generate.js', 'world.js', 'sim.js', 'military.js'])
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), ctx, { filename: f });
 const S = ctx.S; S.WORLD = ctx.WORLD_DATA;
 const args = process.argv.slice(2);

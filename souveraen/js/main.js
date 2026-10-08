@@ -3,7 +3,9 @@
 (function (S) {
   const $ = (id) => document.getElementById(id);
   const SAVE_KEY = 'souveraen.save.v3'; // v3: Länder liegen im gemeinsamen Weltraster
-  const MS_PER_MONTH = [0, 6000, 3000, 1300]; // ein Monat: 6 s, 3 s oder 1,3 s
+  // Spielmonate pro echter Sekunde: Echtzeit (1 Monat = 1 Tag), schnell (1 Monat = 1 Stunde), Zeitraffer (1 Monat = 2 Minuten)
+  const RATE = [0, 1 / 86400, 1 / 3600, 1 / 120];
+  const MAX_CATCHUP_MONTHS = 12;
   const FLAGS = ['#c0392b', '#1f6fb2', '#2e8b57', '#d4a017', '#7d3c98', '#d35400', '#16a085', '#b03a2e'];
   S.WORLD = window.WORLD_DATA;
   let G = null, selected = null, gov = 'demokratie';
@@ -29,6 +31,9 @@
     return o;
   }
   S.save = function (G) {
+    G.realTs = Date.now();
+    G.savedSpeed = S.UI.speed;
+    if (S.R.G === G) G.cam = { x: S.R.cam.x, y: S.R.cam.y, z: S.R.cam.z };
     try { localStorage.setItem(SAVE_KEY, serialize(G)); return true; } catch (e) { return false; }
   };
   function loadSave() {
@@ -127,7 +132,9 @@
     setTimeout(() => {
       try {
         const g = S.generateCountry(selected.c, { gov, ruler: $('rulerName').value.trim() });
+        S.Mil.init(g);
         S.calibrate(g);
+        g.continuous = true; g.frac = 0;
         $('setup').hidden = true;
         $('countryCard').hidden = true;
         enterGame(g, true);
@@ -151,10 +158,17 @@
     S.R.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     S.onDirty = (x0, y0, x1, y1) => S.R.markDirty(x0, y0, x1, y1);
     S.onLog = (text, kind) => { if (kind !== 'info') S.UI.toast(text, kind, 5200); };
+    S.onDirtyGlobal = (gx, gy) => S.R.markDirtyGlobal(gx, gy);
     S.World.setup(G.world);
+    if (!G.mil) S.Mil.init(G);
+    G.continuous = true;
+    S.UI.RATE = RATE;
+    const away = fresh ? null : catchUp(G);
     requestAnimationFrame(() => {
       S.R.init(G, $('mapCanvas'));
       S.UI.initGame(G);
+      if (!fresh && G.savedSpeed !== undefined) S.UI.setSpeed(G.savedSpeed);
+      if (away) S.UI.openAwayReport(G, away);
       if (G.cam && !fresh) { Object.assign(S.R.cam, G.cam); S.R.clampCam(); }
       else {
         // Anflug aus dem All auf das eigene Land
@@ -167,7 +181,49 @@
   }
 
   // ======================= Schleife =======================
-  let last = performance.now(), acc = 0;
+  let last = performance.now(), acc = 0, saveAcc = 0;
+
+  /** Spielzeit um dM Monate fortschreiben: Geld fließt laufend, Militär in Spielstunden, Monatsabschluss bei vollem Monat */
+  function advance(G, dM, onTick) {
+    G.frac = (G.frac || 0) + dM;
+    if (G.eco.last) G.eco.money += G.eco.last.net * dM;
+    S.Mil.advance(G, dM * 720);
+    while (G.frac >= 1) {
+      G.frac -= 1;
+      S.tick(G);
+      if (onTick) onTick();
+      if (G.pendingEvent) break;
+    }
+  }
+
+  /** Was ist passiert, während die App geschlossen war? */
+  function catchUp(G) {
+    if (!G.realTs || !G.savedSpeed) return null;
+    const sec = (Date.now() - G.realTs) / 1000;
+    if (sec < 60) return null;
+    const months = Math.min(MAX_CATCHUP_MONTHS, sec * RATE[G.savedSpeed]);
+    if (months < 0.003) return null;
+    const logBefore = G.log.length ? G.log[0] : null;
+    const m0 = G.month + (G.frac || 0), money0 = G.eco.money;
+    const onLog = S.onLog; S.onLog = null;
+    let left = months;
+    while (left > 0) {
+      const step = Math.min(1 / 720, left);   // eine Spielstunde
+      advance(G, step);
+      left -= step;
+      if (G.pendingEvent) {
+        // Entscheidungen in Abwesenheit: die vorsichtige Wahl
+        const ev = G.pendingEvent, i = ev.auto !== undefined ? ev.auto : ev.choices.length - 1;
+        ev.choices[i].fx(G);
+        S.log(G, 'In deiner Abwesenheit: ' + ev.title + ' – ' + ev.choices[i].label, 'info');
+        G.pendingEvent = null;
+      }
+    }
+    S.onLog = onLog;
+    const news = [];
+    for (const l of G.log) { if (l === logBefore) break; news.push(l); }
+    return { sec, months: G.month + G.frac - m0, money: G.eco.money - money0, news, capped: months >= MAX_CATCHUP_MONTHS };
+  }
   function loop(now) {
     const dt = Math.min(250, now - last);
     last = now;
@@ -175,16 +231,13 @@
     else if (G && S.R.G === G) {
       const speed = S.UI.speed;
       if (speed > 0 && !G.pendingEvent && !S.UI.modalOpen) {
-        acc += dt;
-        if (acc >= MS_PER_MONTH[speed]) {
-          acc = 0;
-          S.tick(G);
-          G.cam = { x: S.R.cam.x, y: S.R.cam.y, z: S.R.cam.z };
-          if (G.month % 12 === 0) S.save(G);
-          S.UI.refresh(false);
-          if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
-        }
+        advance(G, dt / 1000 * RATE[speed], () => { S.UI.refresh(false); });
+        if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
       }
+      acc += dt;
+      if (acc > 1500) { acc = 0; S.UI.refresh(false); }
+      saveAcc += dt;
+      if (saveAcc > 20000) { saveAcc = 0; S.save(G); }
       S.UI.frame(dt);
       S.R.draw(now);
     }

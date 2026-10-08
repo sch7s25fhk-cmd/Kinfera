@@ -23,6 +23,7 @@
     R.noiseA = S.makeNoise(G.meta.seed + 501);
     R.noiseB = S.makeNoise(G.meta.seed + 502);
     R.dirty = null;
+    R.dirtyG = [];
     R.chunks = new Map();     // Detailblöcke (gezeichnet)
     R.ochunks = new Map();    // Übersichtsblöcke
     R.bases = new Map();      // reine Weltdaten je Block (unveränderlich)
@@ -56,8 +57,32 @@
     else { d[0] = Math.min(d[0], x0); d[1] = Math.min(d[1], y0); d[2] = Math.max(d[2], x1); d[3] = Math.max(d[3], y1); }
     R.viewKey = null;
   };
+  /** Geänderter Besitz irgendwo auf der Welt (Eroberung) */
+  R.markDirtyGlobal = function (gx, gy) {
+    (R.dirtyG || (R.dirtyG = [])).push(gx, gy);
+    R.occVer = (R.occVer || 0) + 1;
+  };
+  function flushGlobal() {
+    const d = R.dirtyG;
+    if (!d || !d.length) return;
+    R.dirtyG = [];
+    const WT = World.WT;
+    const touch = (map, size) => {
+      for (const e of map.values()) {
+        if (e.stale) continue;
+        for (let i = 0; i < d.length; i += 2) {
+          let dx = d[i] - e.cx * size; dx = ((dx + WT / 2) % WT + WT) % WT - WT / 2;
+          const dy = d[i + 1] - e.cy * size;
+          if (dx >= -BP - 1 && dx <= size + BP && dy >= -BP - 1 && dy <= size + BP) { e.stale = true; break; }
+        }
+      }
+    };
+    touch(R.chunks, CH); touch(R.ochunks, OCH);
+  }
+
   /** Geänderte Felder des eigenen Landes: betroffene Blöcke als veraltet markieren */
   R.flush = function () {
+    flushGlobal();
     if (!R.dirty) return;
     const G = R.G, WT = World.WT;
     let [x0, y0, x1, y1] = R.dirty;
@@ -117,17 +142,22 @@
     const near = World.citiesNear(gx0, gy0, W, H).filter(n => n.c.cid !== G.meta.id);
     const foreignIdx = new Map();
     const GT = G.t;
+    const occ = G.mil ? G.mil.occ : null;
+    const homeIdx = World.homeIdx, WTw = World.WT;
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const id = j * W + i;
       const lx = i + ox, ly = j + oy;
+      const bo = base.owner[id]; // ursprüngliches Land (für die Stadtform)
       if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) {
         const gi = ly * G.W + lx;
         for (const k in t) if (GT[k]) t[k][id] = GT[k][gi];
-        if (t.region[id] === 1 || t.bld[id] || t.road[id]) continue;
+        if (t.bld[id] || t.road[id]) continue;
+      } else if (occ) {
+        const v = occ[(((gx0 + i) % WTw) + WTw) % WTw + ',' + (gy0 + j)];
+        if (v !== undefined) { t.owner[id] = v; t.region[id] = v === 0 ? 0 : v === homeIdx ? 1 : 2; }
       }
-      const o = t.owner[id];
-      if (!o || t.elev[id] < 0 || t.region[id] === 1) continue;
-      const u = World.urbanAt(near, gx0 + i, gy0 + j, o);
+      if (!bo || bo === homeIdx || t.elev[id] < 0) continue;
+      const u = World.urbanAt(near, gx0 + i, gy0 + j, bo);
       if (!u) continue;
       let ci = foreignIdx.get(u.city);
       if (ci === undefined) { ci = cities.length; foreignIdx.set(u.city, ci); cities.push({ style: u.city.style, x: Math.floor(u.city.gx) - gx0, y: Math.floor(u.city.gy) - gy0, name: u.city.name, foreign: true }); }
@@ -1271,6 +1301,7 @@
         c.fillText('!', sx, sy - 3.5);
       }
     }
+    if (G.mil && ppt >= 0.5) drawUnits(c, G, time);
     if (ppt < 7) drawCountryNames(c, G, ppt);
     if (ppt >= 2.2) { drawForeignLabels(c, G, ppt, gA, gB, hA, hB); drawLabels(c, G); }
     c.globalAlpha = 1;
@@ -1304,10 +1335,36 @@
       }
       const home = paths[World.homeIdx - 1];
       if (home) { c.globalAlpha = base; c.lineWidth = 2.2 / sc; c.strokeStyle = '#f0c45a'; c.stroke(home.p); }
+      // eroberte Gebiete
+      const occ = occList(G);
+      if (occ.length) {
+        c.globalAlpha = base * Math.max(0.55, polA + 0.2);
+        for (let i = 0; i < occ.length; i += 3) {
+          const o = occ[i + 2];
+          c.fillStyle = o === World.homeIdx ? '#e8b23a' : (paths[o - 1] ? darken(paths[o - 1].color) : '#777');
+          c.fillRect(occ[i] / WT, occ[i + 1] / WT, 1.05 / WT, 1.05 / WT);
+        }
+      }
       c.restore();
     }
     c.globalAlpha = base;
   }
+  function occList(G) {
+    if (!G.mil) return [];
+    if (R._occVer === R.occVer && R._occList) return R._occList;
+    const out = [];
+    for (const k in G.mil.occ) { const p = k.indexOf(','); out.push(+k.slice(0, p), +k.slice(p + 1), G.mil.occ[k]); }
+    R._occList = out; R._occVer = R.occVer;
+    return out;
+  }
+  const _dk = {};
+  function darken(hex) {
+    if (_dk[hex]) return _dk[hex];
+    const [r, g, b] = hexRgb(hex);
+    return (_dk[hex] = 'rgb(' + Math.round(r * 0.62) + ',' + Math.round(g * 0.62) + ',' + Math.round(b * 0.62) + ')');
+  }
+  R.unitColor = (o) => o === World.homeIdx ? '#e3ad3c' : o === -1 ? '#555b63' : darken((R.globe.items[o - 1] || {}).color || '#888888');
+
   function nbox(it) {
     if (!it) return null;
     const [x0, y0, x1, y1] = it.box;
@@ -1322,6 +1379,90 @@
     const cgx = R.camGX();
     while (gx - cgx > WT / 2) gx -= WT; while (gx - cgx < -WT / 2) gx += WT;
     return R.worldToScreen((gx - G.gx0) * TS, (World.gyOf(lat) - G.gy0) * TS);
+  }
+
+  /** Globale Feldkoordinate -> Bildschirm (nächster Umlauf zur Kamera) */
+  R.gToScreen = function (gx, gy) {
+    const G = R.G, WT = World.WT;
+    let lx = gx - G.gx0;
+    const cx = R.cam.x / TS;
+    while (lx - cx > WT / 2) lx -= WT; while (lx - cx < -WT / 2) lx += WT;
+    return R.worldToScreen(lx * TS, (gy - G.gy0) * TS);
+  };
+  R.screenToG = function (sx, sy) {
+    const [wx, wy] = R.screenToWorld(sx, sy);
+    return [wx / TS + R.G.gx0, wy / TS + R.G.gy0];
+  };
+  /** Einheit unter einem Bildschirmpunkt */
+  R.unitAt = function (sx, sy) {
+    const G = R.G;
+    if (!G.mil || R.flatA < 0.5) return null;
+    let best = null, bd = 24;
+    for (const u of G.mil.units) {
+      const [x, y] = R.gToScreen(u.x, u.y);
+      const d = Math.hypot(x - sx, y - sy);
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  };
+
+  function drawUnits(c, G, time) {
+    const T = (time || 0) / 1000, home = World.homeIdx, now = G.mil.hours;
+    const sel = new Set(R.selUnits || []);
+    const byId = new Map(G.mil.units.map(u => [u.id, u]));
+    // Marschwege
+    c.lineWidth = 1.6; c.setLineDash([5, 4]);
+    for (const u of G.mil.units) {
+      if (u.o !== home || !u.path) continue;
+      const [x0, y0] = R.gToScreen(u.x, u.y);
+      const [tx, ty] = R.gToScreen(u.path[u.path.length - 1][0], u.path[u.path.length - 1][1]);
+      c.strokeStyle = sel.has(u.id) ? 'rgba(255,255,255,0.95)' : 'rgba(255,240,200,0.45)';
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(tx, ty); c.stroke();
+      if (sel.has(u.id)) { c.fillStyle = '#fff'; c.beginPath(); c.arc(tx, ty, 4, 0, Math.PI * 2); c.fill(); }
+    }
+    c.setLineDash([]);
+    // Gefechte
+    for (const u of G.mil.units) {
+      if (!u.fight) continue;
+      const v = byId.get(u.fight);
+      if (!v) continue;
+      const [x0, y0] = R.gToScreen(u.x, u.y), [x1, y1] = R.gToScreen(v.x, v.y);
+      const ph = (T * 3 + u.id * 0.37) % 1;
+      c.strokeStyle = 'rgba(255,' + Math.round(120 + 100 * ph) + ',60,' + (0.85 - ph * 0.6).toFixed(2) + ')';
+      c.lineWidth = 2;
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + (x1 - x0) * ph, y0 + (y1 - y0) * ph); c.stroke();
+      if (ph > 0.75) { c.fillStyle = 'rgba(255,200,80,0.9)'; c.beginPath(); c.arc(x1 + (Math.sin(u.id + T * 7) * 5), y1 + Math.cos(u.id + T * 5) * 5, 3 + (ph - 0.75) * 16, 0, Math.PI * 2); c.fill(); }
+    }
+    // Spielsteine (eigene zuletzt, damit sie oben liegen)
+    const list = G.mil.units.slice().sort((a, b) => (a.o === home) - (b.o === home));
+    for (const u of list) {
+      const [x, y] = R.gToScreen(u.x, u.y);
+      if (x < -30 || y < -30 || x > R.cw + 30 || y > R.ch + 30) continue;
+      const w = 28, h = 19;
+      const training = u.ready > now;
+      c.globalAlpha = (training ? 0.55 : 1) * R.flatA;
+      if (u.fight || u.under) {
+        c.fillStyle = 'rgba(230,60,40,' + (0.35 + 0.3 * Math.sin(T * 8)).toFixed(2) + ')';
+        c.beginPath(); c.arc(x, y, 19, 0, Math.PI * 2); c.fill();
+      }
+      c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(x - w / 2 + 2, y - h / 2 + 2, w, h);
+      c.fillStyle = R.unitColor(u.o);
+      c.fillRect(x - w / 2, y - h / 2, w, h);
+      const ink = u.o === home ? '#1b2531' : '#ffffff';
+      c.strokeStyle = ink; c.lineWidth = 1.4;
+      c.strokeRect(x - w / 2 + 3, y - h / 2 + 3, w - 6, h - 6);
+      c.beginPath();
+      if (u.type === 'inf') { c.moveTo(x - w / 2 + 3, y - h / 2 + 3); c.lineTo(x + w / 2 - 3, y + h / 2 - 3); c.moveTo(x + w / 2 - 3, y - h / 2 + 3); c.lineTo(x - w / 2 + 3, y + h / 2 - 3); c.stroke(); }
+      else if (u.type === 'tank') { c.ellipse(x, y, w / 2 - 7, h / 2 - 6, 0, 0, Math.PI * 2); c.stroke(); }
+      else { c.fillStyle = ink; c.arc(x, y, 2.8, 0, Math.PI * 2); c.fill(); }
+      // Stärke
+      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, y + h / 2 + 1, w, 4);
+      c.fillStyle = u.hp > 60 ? '#5fbf7f' : u.hp > 30 ? '#f0b23a' : '#e5574e';
+      c.fillRect(x - w / 2, y + h / 2 + 1, w * Math.max(0, u.hp) / 100, 4);
+      if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.strokeRect(x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 12); }
+      if (training) { c.fillStyle = '#fff'; c.font = '600 9px "Public Sans", system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('Ausbildung', x, y - h / 2 - 6); }
+    }
+    c.globalAlpha = R.flatA;
   }
 
   function drawCountryNames(c, G, ppt) {

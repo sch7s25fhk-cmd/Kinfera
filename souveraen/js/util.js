@@ -73,6 +73,8 @@ var S = (typeof window !== 'undefined' ? window : globalThis).S = (typeof window
   S.MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
   S.START_YEAR = 2026;
   S.dateStr = (m) => S.MONTHS[m % 12] + ' ' + (S.START_YEAR + Math.floor(m / 12));
+  /** Datum mit Tag (ein Monat hat im Spiel 30 Tage) */
+  S.dateFull = (G) => (1 + Math.min(29, Math.floor((G.frac || 0) * 30))) + '. ' + S.dateStr(G.month);
 
   S.esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

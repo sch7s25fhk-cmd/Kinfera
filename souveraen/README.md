@@ -31,13 +31,15 @@ python3 tools/build_single.py            # schreibt dist/souveraen.html
 | Gebäude, Stadt gründen, Abriss | Werkzeug wählen, Bauplatz antippen, „Bauen“ bestätigen |
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
+| Truppen führen | Einheit antippen, „+ Truppen ringsum“ für eine Gruppe, „Marschziel“, Ziel antippen |
 
-Ein Spielmonat dauert 6 Sekunden (schnell: 3 s, sehr schnell: 1,3 s). Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.
+Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten). Die Welt läuft weiter, wenn die App geschlossen ist; beim Öffnen wird bis zu ein Jahr nachgerechnet und ein Lagebericht gezeigt. Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.
 
 ## Entwicklung
 
 ```bash
 node tools/simtest.js DEU EGY JPN --months=120   # Simulation ohne Browser testen
+node tools/wartest.js DEU FRA 20                  # Krieg ohne Browser durchspielen (Tage)
 python3 tools/build_data.py ne_50m_admin_0_countries.geojson ne_50m_populated_places_simple.geojson > js/data/world.js
 ```
 

@@ -135,6 +135,10 @@
       desc: 'Grünfläche. Macht die Nachbarschaft lebenswerter und schluckt Abgase.' },
     33: { key: 'stadium', name: 'Stadion', cost: 600, upkeep: 4, jobs: 40, energy: 5, poll: 0.02, cat: 'gesellschaft',
       desc: 'Großes Plus an Zufriedenheit in der Stadt.' },
+    18: { key: 'barracks', name: 'Kaserne', cost: 250, upkeep: 3, jobs: 60, energy: 3, poll: 0.03, cat: 'militaer',
+      desc: 'Bildet Infanterie, Panzer und Artillerie aus. Neue Truppen erscheinen hier.' },
+    19: { key: 'fort', name: 'Festung', cost: 180, upkeep: 1.5, jobs: 10, energy: 1, poll: 0, cat: 'militaer',
+      desc: 'Bunker und Gräben: Eigene Truppen auf diesem Feld verteidigen fast doppelt so stark.' },
     34: { key: 'monument', name: 'Wahrzeichen', cost: 900, upkeep: 2, jobs: 15, energy: 1, poll: 0, cat: 'gesellschaft',
       desc: 'Prägt das Stadtbild im Stil der Stadt. Tourismus und Nationalstolz.' }
   };
@@ -162,6 +166,7 @@
     { key: 'wirtschaft', name: 'Wirtschaft', short: 'Betriebe', tools: [10, 11, 12, 13, 14, 15, 16, 17].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'energie', name: 'Energie', tools: [20, 21, 22, 23, 24].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'gesellschaft', name: 'Gesellschaft', short: 'Soziales', tools: [30, 31, 32, 33, 34].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'militaer', name: 'Militär', tools: [18, 19].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'landschaft', name: 'Landschaft', short: 'Gelände', tools: [
       { id: 't_raise', name: 'Anheben', kind: 'terra', op: 'raise', cost: 6, desc: 'Hebt das Gelände an. Aus Wasser wird Land, aus Hügeln Berge.' },
       { id: 't_lower', name: 'Absenken', kind: 'terra', op: 'lower', cost: 6, desc: 'Senkt das Gelände ab. Tief genug entsteht ein See oder eine Bucht.' },

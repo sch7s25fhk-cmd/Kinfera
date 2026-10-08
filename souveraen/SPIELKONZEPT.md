@@ -62,7 +62,7 @@ Die Häuser verdichten sich vom Zentrum aus: aus Einfamilienhäusern werden Reih
 
 1. **Globus:** Erde mit dem Finger drehen, mit zwei Fingern zoomen, Land antippen oder suchen, Steckbrief lesen (Einwohner, Wirtschaft, Fläche, Schwierigkeit).
 2. **Amtsantritt:** Regierungsform wählen, optional eigenen Namen eingeben.
-3. **Regieren:** Die Zeit läuft in Monaten – ein Monat dauert 6 Sekunden, schneller geht es mit 3 s oder 1,3 s, oder Pause. Jeden Monat werden Wirtschaft, Haushalt, Zufriedenheit und Stadtwachstum berechnet.
+3. **Regieren:** Die Zeit läuft in Echtzeit – ein Spielmonat dauert einen echten Tag, auch bei geschlossener App. Schneller geht es mit 1 Monat pro Stunde oder pro 2 Minuten; Pause hält alles an.
 4. **Ereignisse** verlangen Entscheidungen: Dürre, Ölfund, Konzern will Werk bauen, Hochwasser, Rezession, Streik, Einwanderung, Olympia-Bewerbung, Forschungsdurchbruch, Erdbeben, Waldbrand, Handelsabkommen, Klimaproteste.
 5. **Wahl oder Umsturz:**
    - *Demokratie:* alle 4 Jahre Wahl, unter 50 % bist du raus. +4 Zufriedenheit.
@@ -97,7 +97,38 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - Zonen und Geländeformung werden mit einem Finger gemalt, verschoben wird dann mit zwei Fingern.
 - Lagebericht, Haushalt und Städte liegen in einem Blatt, das von unten hereinfährt.
 
-## 6. Technik
+## 6. Zeit und Militär
+
+### Echtzeit
+- **1 Spielmonat = 1 echter Tag** (ein Spieltag ≈ 48 Minuten, eine Spielstunde = 2 Minuten). Schnellere Stufen: 1 Monat pro Stunde, 1 Monat pro 2 Minuten, oder Pause.
+- Geld fließt laufend (Monatssaldo anteilig pro Sekunde); Wachstum, Ereignisse und Wahlen kommen zum Monatsabschluss.
+- Die Welt läuft weiter, wenn die App geschlossen ist. Beim Öffnen wird bis zu ein Jahr nachgerechnet (Ereignisse werden vorsichtig entschieden) und ein Lagebericht gezeigt.
+
+### Truppen
+| Einheit | Kosten | Unterhalt/Monat | Tempo | Stärken |
+|---|---|---|---|---|
+| Infanterie | 60 | 1,5 | 110 km/Tag | zäh in der Verteidigung, günstig |
+| Panzer | 170 | 4 | 240 km/Tag | stark im Angriff, schnell |
+| Artillerie | 120 | 2,5 | 90 km/Tag | Fernbeschuss bis 45 km, schwach in der Abwehr |
+
+- Truppen werden in **Kasernen** ausgebildet (Stunden bis Tage Spielzeit). **Festungen** verdoppeln fast die Verteidigung auf ihrem Feld.
+- Steuerung: Einheit antippen → „+ Truppen ringsum“ für eine Gruppe → „Marschziel“ → Ziel antippen. Ein Ziel im Nachbarland löst eine Kriegserklärung mit allen Folgen aus.
+- **Gefechte** entstehen automatisch, wenn Gegner in Kontakt kommen. Gelände (Berge, Hügel, Wald, Stadt), Heimvorteil und Festungen stärken die Verteidiger; beschädigte Einheiten erholen sich auf eigenem Boden.
+- **Fronten:** Wo Truppen ungehindert stehen, wechselt das Land den Besitzer – die Grenze wandert. **Städte** fallen, sobald kein Verteidiger mehr in der Nähe ist. Fällt die eigene Hauptstadt, kapituliert die Regierung.
+
+### Gegner
+- Jedes Land stellt eine Armee nach seiner echten Größe auf, mobilisiert anderthalb Tage, hält einen Teil zur Verteidigung zurück und greift mit dem Rest die nächsten Städte an. Nachschub kommt alle zwei Spieltage.
+- Nachbarn mit Landgrenze erklären auch selbst den Krieg – häufiger, wenn deine Armee schwach ist oder du gerade selbst angegriffen hast.
+- Verliert die KI, bietet sie Frieden und Reparationen an. Du kannst jederzeit Frieden anbieten; angenommen wird er je nach Kriegslage.
+
+### Folgen
+- Unterhalt der Armee, −12 % Handel je Krieg, bei eigenem Angriff 18 Monate Sanktionen (Exporte −20 %, Importe +20 %).
+- Kriegsmüdigkeit senkt die Zustimmung (stärker in Demokratien), Siege heben sie kurz, verlorene Städte kosten viel.
+- Gefallene und Eingezogene fehlen der Bevölkerung und dem Arbeitsmarkt.
+- Besetzte Städte zahlen Abgaben, leisten aber Widerstand; ohne Truppen in der Nähe kommt es zu Aufständen mit Partisanen.
+- Besetzte eigene Gebiete fallen aus: Gebäude dort arbeiten nicht, Wohnraum geht verloren.
+
+## 7. Technik
 
 - Reines HTML/CSS/JavaScript ohne Build-Schritt, läuft offline (Schriften optional von Google Fonts).
 - Kartendaten: Natural Earth 1:50m (gemeinfrei), vereinfacht auf ~430 KB.
@@ -110,6 +141,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/data/world.js` | Ländergrenzen, Einwohner, Wirtschaft, Städte (generiert) |
 | `js/defs.js` | Landschaften, Gebäude, Stadtstile, Regierungsformen |
 | `js/generate.js` | Landeskarte aus echten Grenzen: Höhen, Klima, Flüsse, Wald, Rohstoffe, Startstädte, Straßen |
+| `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
 | `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |
@@ -120,9 +152,9 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `tools/simtest.js` | Testlauf der Simulation ohne Browser |
 | `tools/build_single.py` | Baut eine einzelne HTML-Datei zum Teilen |
 
-## 7. Ausbaustufen (Ideen für später)
+## 8. Ausbaustufen (Ideen für später)
 
-0. **Militär und Eroberung** (vorbereitet): Jedes Feld der Welt kennt sein Land (`owner`). Geplant sind Armeen aus Kasernen, Truppen auf der Karte, Angriffe auf Nachbarn, Frontlinien und Besetzung. Erobertes Gebiet wechselt den Besitzer, das verwaltete Raster des eigenen Landes wächst mit, eroberte Städte werden zu echten eigenen Städten. Krieg kostet Geld und Zustimmung und kann Gegenangriffe und Sanktionen auslösen.
+0. **Seekrieg und Luftwaffe:** Truppen können bisher nur über Land marschieren. Häfen, Transportschiffe und Flugzeuge würden Inselstaaten und Überseekriege ermöglichen. Eroberte Gebiete außerhalb des Kernlands könnten das bebaubare Raster erweitern.
 
 1. **Echte Höhendaten** (z. B. ETOPO) statt prozeduraler Berge – die Alpen lägen dann wirklich in Süddeutschland.
 2. **Diplomatie und Nachbarn:** Handelsverträge, Grenzkonflikte, Bündnisse; Nachbarländer als KI-Staaten.

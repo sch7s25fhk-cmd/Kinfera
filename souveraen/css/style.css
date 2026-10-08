@@ -385,3 +385,15 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
 }
 #actionBar:not([hidden]) ~ .home-btn { display: none; }
+
+.war { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: var(--panel-2); border-left: 3px solid var(--bad); }
+.war-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.war-head b { font: 800 17px/1 var(--f-display); text-transform: uppercase; }
+.war-head span { color: var(--muted); font-size: 12px; }
+.tcat { min-width: 44px; }
+/* Kopfzeile: Name, Datum, Tempo und Menü passen in eine Zeile */
+.tb-nation { min-width: 0; flex: 1 1 0; }
+.tb-nation strong { font-size: 18px; }
+#tbDate { font-size: 12px; white-space: nowrap; }
+.speed button { padding: 7px 6px; }
+.tb-menu { padding: 6px 8px; }

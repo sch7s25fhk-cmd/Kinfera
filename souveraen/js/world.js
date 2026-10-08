@@ -28,6 +28,7 @@
     Wd.countryIndex = {};
     S.WORLD.forEach((c, i) => { Wd.countryIndex[c.id] = i + 1; });
     Wd.homeIdx = Wd.countryIndex[p.home] || 0;
+    if (S.Mil && S.Mil.resetCache) S.Mil.resetCache();
     buildCityTable();
   };
 

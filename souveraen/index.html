@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Souverän</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ Weltkarte ============ -->
+  <section id="screen-world" class="screen">
+    <canvas id="worldCanvas" aria-label="Weltkarte"></canvas>
+    <header class="wm-head">
+      <div class="brand">
+        <span class="seal" aria-hidden="true"></span>
+        <div>
+          <h1>Souverän</h1>
+          <p>Wähle ein Land der Erde. Regiere es, baue es aus, forme seine Landschaft und Städte.</p>
+        </div>
+      </div>
+      <div class="search">
+        <label for="countrySearch" class="sr">Land suchen</label>
+        <input id="countrySearch" type="search" placeholder="Land suchen, z. B. Norwegen" autocomplete="off">
+        <ul id="searchList" class="search-list" hidden></ul>
+      </div>
+      <button id="btnContinue" class="btn btn-ghost" hidden></button>
+    </header>
+    <p class="wm-hint">Ziehen zum Verschieben · Mausrad oder zwei Finger zum Zoomen · Land antippen zum Auswählen</p>
+
+    <aside id="countryCard" class="card" hidden>
+      <button class="close" data-close="countryCard" aria-label="Schließen">×</button>
+      <div class="cc-top">
+        <canvas id="ccShape" aria-hidden="true"></canvas>
+        <div>
+          <p class="eyebrow" id="ccCont"></p>
+          <h2 id="ccName"></h2>
+          <p class="cc-cap" id="ccCap"></p>
+        </div>
+      </div>
+      <dl class="facts" id="ccFacts"></dl>
+      <p class="cc-diff" id="ccDiff"></p>
+      <button id="btnRule" class="btn btn-primary">Dieses Land regieren</button>
+    </aside>
+
+    <div id="setup" class="modal" hidden>
+      <div class="modal-box setup-box" role="dialog" aria-labelledby="setupTitle">
+        <p class="eyebrow">Amtsantritt</p>
+        <h2 id="setupTitle">Wie willst du regieren?</h2>
+        <div class="govs" id="govChoices"></div>
+        <label class="field" for="rulerName">Dein Name als Staatsoberhaupt <span>(optional)</span></label>
+        <input id="rulerName" type="text" maxlength="40" placeholder="z. B. Alex Sommer">
+        <div class="row-end">
+          <button class="btn btn-ghost" data-close="setup">Zurück</button>
+          <button id="btnStart" class="btn btn-primary">Amt übernehmen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Spiel ============ -->
+  <section id="screen-game" class="screen" hidden>
+    <header id="topbar">
+      <div class="tb-nation">
+        <span class="seal small" aria-hidden="true"></span>
+        <div>
+          <strong id="tbName"></strong>
+          <span id="tbRuler"></span>
+        </div>
+      </div>
+      <div class="tb-time">
+        <span id="tbDate" class="mono"></span>
+        <div class="speed" role="group" aria-label="Spielgeschwindigkeit">
+          <button data-speed="0" title="Pause (Leertaste)" aria-label="Pause"><svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/></svg></button>
+          <button data-speed="1" title="Normal (1)" aria-label="Normal"><svg viewBox="0 0 16 16"><path d="M4 2l9 6-9 6z"/></svg></button>
+          <button data-speed="2" title="Schnell (2)" aria-label="Schnell"><svg viewBox="0 0 16 16"><path d="M1 2l7 6-7 6zM8 2l7 6-7 6z"/></svg></button>
+          <button data-speed="3" title="Sehr schnell (3)" aria-label="Sehr schnell"><svg viewBox="0 0 16 16"><path d="M0 3l5 5-5 5zM5.5 3l5 5-5 5zM11 3l5 5-5 5z"/></svg></button>
+        </div>
+      </div>
+      <div class="tb-stats" id="tbStats"></div>
+      <button id="btnMenu" class="btn btn-ghost tb-menu">Menü</button>
+    </header>
+
+    <nav id="toolbar" aria-label="Werkzeuge"></nav>
+    <div id="flyout" hidden></div>
+
+    <main id="mapWrap">
+      <canvas id="mapCanvas" aria-label="Landeskarte"></canvas>
+      <div id="tooltip" hidden></div>
+      <div id="views" role="group" aria-label="Kartenansicht"></div>
+      <div id="toasts" aria-live="polite"></div>
+      <button id="btnPanel" class="btn btn-primary panel-toggle">Lage</button>
+    </main>
+
+    <aside id="panel">
+      <button id="btnPanelClose" class="panel-close" aria-label="Bericht schließen"><span></span></button>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div id="panelBody"></div>
+    </aside>
+
+    <div id="modal" class="modal" hidden><div class="modal-box" id="modalBox" role="dialog"></div></div>
+  </section>
+</div>
+
+<script src="js/data/world.js"></script>
+<script src="js/util.js"></script>
+<script src="js/defs.js"></script>
+<script src="js/generate.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/worldmap.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

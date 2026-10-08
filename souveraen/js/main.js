@@ -3,7 +3,7 @@
 (function (S) {
   const $ = (id) => document.getElementById(id);
   const SAVE_KEY = 'souveraen.save.v1';
-  const MS_PER_MONTH = [0, 2400, 1100, 420];
+  const MS_PER_MONTH = [0, 6000, 3000, 1300]; // ein Monat: 6 s, 3 s oder 1,3 s
   const FLAGS = ['#c0392b', '#1f6fb2', '#2e8b57', '#d4a017', '#7d3c98', '#d35400', '#16a085', '#b03a2e'];
   S.WORLD = window.WORLD_DATA;
   let G = null, selected = null, gov = 'demokratie';
@@ -169,7 +169,7 @@
   function loop(now) {
     const dt = Math.min(250, now - last);
     last = now;
-    if (!$('screen-world').hidden) S.WM.draw();
+    if (!$('screen-world').hidden) S.WM.draw(now);
     else if (G && S.R.G === G) {
       const speed = S.UI.speed;
       if (speed > 0 && !G.pendingEvent && !S.UI.modalOpen) {
@@ -183,6 +183,7 @@
           if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
         }
       }
+      S.UI.frame(dt);
       S.R.draw(now);
     }
     requestAnimationFrame(loop);
@@ -191,6 +192,8 @@
   function boot() {
     S.WM.init($('worldCanvas'), selectCountry);
     bindWorldUI();
+    $('gZoomIn').addEventListener('click', () => S.WM.zoomBy(1.6));
+    $('gZoomOut').addEventListener('click', () => S.WM.zoomBy(1 / 1.6));
     window.addEventListener('resize', () => {
       S.WM.resize();
       if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); }

@@ -1,6 +1,6 @@
 # Souverän
 
-Eine Staats- und Aufbausimulation im Browser: Wähle ein echtes Land von der Weltkarte, regiere es, baue Infrastruktur und Wirtschaft auf, forme die Landschaft und lass Städte in deinem Stil wachsen.
+Eine Staats- und Aufbausimulation fürs Handy (Hochformat, Touch): Wähle ein echtes Land von der Weltkarte, regiere es, baue Infrastruktur und Wirtschaft auf, forme die Landschaft und lass Städte in deinem Stil wachsen.
 
 Das vollständige Spielkonzept steht in [SPIELKONZEPT.md](SPIELKONZEPT.md).
 
@@ -20,17 +20,18 @@ Alternativ eine einzelne, eigenständige HTML-Datei bauen, die sich direkt per D
 python3 tools/build_single.py            # schreibt dist/souveraen.html
 ```
 
-### Steuerung
+### Steuerung (Touch)
 
-| Aktion | Maus | Touch |
-|---|---|---|
-| Karte verschieben | mit „Ansehen“ ziehen, oder rechte/mittlere Taste | mit einem Finger ziehen (Ansehen) oder zwei Fingern |
-| Zoomen | Mausrad | zwei Finger |
-| Straße/Bahn bauen | Werkzeug wählen, ziehen | Werkzeug wählen, ziehen |
-| Zonen, Landschaft, Abriss | über die Karte malen | über die Karte malen |
-| Gebäude, Stadt gründen | klicken | antippen |
+| Aktion | Geste |
+|---|---|
+| Globus drehen | mit einem Finger wischen (mit Schwung) |
+| Zoomen (Globus und Karte) | zwei Finger, doppelt tippen oder die Knöpfe + / − |
+| Karte verschieben | ein Finger |
+| Gebäude, Stadt gründen, Abriss | Werkzeug wählen, Bauplatz antippen, „Bauen“ bestätigen |
+| Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
+| Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
 
-Tasten: Leertaste Pause · 1–3 Geschwindigkeit · Pfeile/WASD verschieben · +/− zoomen · Esc zurück zu „Ansehen“.
+Ein Spielmonat dauert 6 Sekunden (schnell: 3 s, sehr schnell: 1,3 s). Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.
 
 ## Entwicklung
 

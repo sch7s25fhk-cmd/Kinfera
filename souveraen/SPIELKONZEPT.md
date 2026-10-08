@@ -1,6 +1,6 @@
 # Souverän – Spielkonzept
 
-**Genre:** Aufbau- und Staatssimulation · **Plattform:** Browser (Desktop und Handy) · **Sprache:** Deutsch
+**Genre:** Aufbau- und Staatssimulation · **Plattform:** Handy (Hochformat, Touch), läuft im Browser · **Sprache:** Deutsch
 
 > Wähle ein echtes Land der Erde. Regiere es, baue seine Wirtschaft auf, forme seine Landschaft und lass Städte nach deinen Vorstellungen wachsen.
 
@@ -8,7 +8,7 @@
 
 ## 1. Die Idee
 
-Du bist Staatsoberhaupt eines echten Landes. Auf einer Weltkarte mit den echten Grenzen suchst du dir ein Land aus – Deutschland, Ägypten, Japan, Luxemburg oder Brasilien. Das Spiel erzeugt daraus eine begehbare Landkarte:
+Du bist Staatsoberhaupt eines echten Landes. Auf einem drehbaren 3D-Globus mit den echten Grenzen suchst du dir ein Land aus – Deutschland, Ägypten, Japan, Luxemburg oder Brasilien. Das Spiel erzeugt daraus eine begehbare Landkarte:
 
 - Die **Landesform** stammt aus den echten Grenzen. Nachbarländer und Meere liegen dort, wo sie wirklich liegen.
 - Das **Klima** folgt der echten geografischen Breite: Ägypten ist Wüste mit Nil-artigen Flussoasen, Norwegen kalt und bewaldet, Indonesien tropisch.
@@ -60,9 +60,9 @@ Die Häuser verdichten sich vom Zentrum aus: aus Einfamilienhäusern werden Reih
 
 ## 3. Spielablauf
 
-1. **Weltkarte:** Land suchen oder antippen, Steckbrief lesen (Einwohner, Wirtschaft, Fläche, Schwierigkeit).
+1. **Globus:** Erde mit dem Finger drehen, mit zwei Fingern zoomen, Land antippen oder suchen, Steckbrief lesen (Einwohner, Wirtschaft, Fläche, Schwierigkeit).
 2. **Amtsantritt:** Regierungsform wählen, optional eigenen Namen eingeben.
-3. **Regieren:** Die Zeit läuft in Monaten (Pause, 3 Geschwindigkeiten). Jeden Monat werden Wirtschaft, Haushalt, Zufriedenheit und Stadtwachstum berechnet.
+3. **Regieren:** Die Zeit läuft in Monaten – ein Monat dauert 6 Sekunden, schneller geht es mit 3 s oder 1,3 s, oder Pause. Jeden Monat werden Wirtschaft, Haushalt, Zufriedenheit und Stadtwachstum berechnet.
 4. **Ereignisse** verlangen Entscheidungen: Dürre, Ölfund, Konzern will Werk bauen, Hochwasser, Rezession, Streik, Einwanderung, Olympia-Bewerbung, Forschungsdurchbruch, Erdbeben, Waldbrand, Handelsabkommen, Klimaproteste.
 5. **Wahl oder Umsturz:**
    - *Demokratie:* alle 4 Jahre Wahl, unter 50 % bist du raus. +4 Zufriedenheit.
@@ -80,17 +80,27 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 
 ## 5. Darstellung
 
-- **Weltkarte** in der Natural-Earth-Projektion mit allen 241 Ländern, Suche, Zoom und Steckbrief mit Umrissvorschau.
+- **3D-Globus** (orthografische Projektion mit Licht, Atmosphäre und Sternenhimmel) mit allen 241 Ländern: wischen mit Schwung, Zwei-Finger-Zoom bis zu Kleinstaaten, Doppeltippen, Suche mit Kameraflug und Steckbrief mit Umrissvorschau.
 - **Landeskarte** als gemalte Draufsicht: weiches Gelände mit Relief-Schattierung, Meerestiefen, Strände, Flüsse, Wälder (Laub-, Nadel- und Regenwald), Berge mit Schneekappen, Palmen in der Wüste.
 - **Gebäude** in Schrägansicht mit Schatten; jeder Stadtstil hat eigene Farben und Bauformen. Rauch aus Schloten, Dampf aus Kühltürmen.
 - **Datenansichten:** Wohndichte, Zufriedenheit, Verschmutzung, Fruchtbarkeit, Rohstoffe, Verkehrsnetz.
 - Werkzeug-Symbole sind Miniaturen der echten Gebäude auf der Karte.
+- **Zoom** von der ganzen Landesübersicht bis zu einzelnen Häusern (4-fach). Die Karte wird in Blöcken gezeichnet, deren Schärfe der Zoomstufe folgt; weit herausgezoomt zeigt eine Übersichtskarte Städte, Straßen und Flüsse.
+
+### Touch-Steuerung
+
+- Ein Finger verschiebt die Karte (mit Schwung), zwei Finger zoomen, doppelt tippen zoomt hinein, + / − als Knöpfe für die Einhandbedienung.
+- Werkzeugleiste unten in Daumenreichweite; die Werkzeuge erscheinen als Kartenraster mit Kosten.
+- **Antippen und bestätigen:** Ein Tipp setzt eine Vorschau, die Aktionsleiste zeigt Kosten, Ertrag an genau diesem Ort und Warnungen (z. B. fehlende Straße). Gebaut wird erst mit „Bauen“.
+- Straßen und Bahnen: Start und Ziel antippen; nach dem Bau ist das Ziel der neue Start, so lassen sich Strecken Stück für Stück ziehen.
+- Zonen und Geländeformung werden mit einem Finger gemalt, verschoben wird dann mit zwei Fingern.
+- Lagebericht, Haushalt und Städte liegen in einem Blatt, das von unten hereinfährt.
 
 ## 6. Technik
 
 - Reines HTML/CSS/JavaScript ohne Build-Schritt, läuft offline (Schriften optional von Google Fonts).
 - Kartendaten: Natural Earth 1:50m (gemeinfrei), vereinfacht auf ~430 KB.
-- Die Landeskarte ist ein Raster von 40–128 Feldern pro Seite; die Feldgröße hängt von der Landesgröße ab (Monaco ≈ 0,1 km, Russland ≈ 75 km pro Feld).
+- Die Landeskarte ist ein Raster von 72–192 Feldern pro Seite; die Feldgröße hängt von der Landesgröße ab (Luxemburg ≈ 1 km, Deutschland ≈ 7 km, Russland ≈ 50 km pro Feld). Startstädte belegen nur einen kleinen Teil davon, damit viel Platz zum Gestalten bleibt.
 - Bei Spielstart wird der Haushalt kalibriert: Nicht simulierte Teile der Wirtschaft erscheinen als „Übrige Wirtschaft“ bzw. „Renten & Altlasten“, damit jedes Land mit einem leichten Plus startet.
 - Speichern im Browser (automatisch jährlich und beim Verlassen der Seite).
 
@@ -101,7 +111,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/generate.js` | Landeskarte aus echten Grenzen: Höhen, Klima, Flüsse, Wald, Rohstoffe, Startstädte, Straßen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
-| `js/worldmap.js` | Weltkarte zur Länderwahl |
+| `js/worldmap.js` | 3D-Globus zur Länderwahl |
 | `js/ui.js` | Werkzeuge, Panels, Dialoge, Maus- und Touch-Steuerung |
 | `js/main.js` | Start, Spielschleife, Speichern |
 | `tools/build_data.py` | Erzeugt `world.js` aus Natural-Earth-GeoJSON |

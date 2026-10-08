@@ -1,6 +1,7 @@
-/* Souverän – Oberfläche
-   Layout: Kartentisch – die Karte füllt alles, Werkzeugleiste links, Lagebericht rechts,
-   Staatsleiste oben. Auf dem Telefon wandern Werkzeuge nach unten und der Bericht wird zum Blatt. */
+/* Souverän – Oberfläche (reines Handy-Spiel, Hochformat)
+   Layout: Die Karte füllt den Bildschirm. Oben die Staatsleiste, unten die Werkzeugleiste für den Daumen,
+   darüber die Aktionsleiste zum Bestätigen. Der Lagebericht ist ein Blatt, das von unten hereinfährt.
+   Auf großen Bildschirmen steht das Spiel als Handy-Rahmen in der Mitte. */
 :root {
   --ink: #111b25;        /* Grund: Nachtblau der Kanzlei */
   --panel: #18242f;
@@ -25,13 +26,15 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: var(--ink);
+  background: #070d16;
   color: var(--paper);
   font: 14px/1.45 var(--f-body);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
-#app { height: 100%; position: relative; }
+#app { height: 100%; position: relative; max-width: 520px; margin: 0 auto; background: var(--ink); overflow: hidden; }
+@media (min-width: 560px) { #app { box-shadow: 0 0 0 1px var(--line), 0 30px 90px rgba(0, 0, 0, .6); } }
+button, .btn, .tcat, .tool, .chip { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .screen { position: absolute; inset: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
@@ -135,12 +138,6 @@ button { font: inherit; color: inherit; }
 .opts.grid2 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
 /* ================= Spielbildschirm ================= */
-#screen-game {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 360px;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "top top top" "tools map panel";
-}
 #topbar {
   grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 14px;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
@@ -285,41 +282,99 @@ button { font: inherit; color: inherit; }
 .helpgrid { display: grid; gap: 10px; font-size: 13.5px; }
 .helpgrid b { color: var(--brass); }
 
-/* ================= Telefon ================= */
-@media (max-width: 820px) {
-  #screen-game {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: "top" "map" "tools";
-  }
-  #topbar { flex-wrap: wrap; gap: 6px 10px; padding: 6px 10px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
-  .tb-nation { flex: 1 1 auto; }
-  .tb-nation .seal { display: none; }
-  .tb-stats { order: 3; flex-basis: 100%; }
-  .stat { min-width: 84px; padding: 3px 8px; }
-  #toolbar {
-    flex-direction: row; border-right: 0; border-top: 1px solid var(--line); overflow-x: auto; overflow-y: hidden;
-    padding: 6px 8px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-  }
-  .tcat { flex: 1 0 64px; }
-  #flyout { left: 8px; right: 8px; width: auto; top: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-height: 55%; }
-  #panel {
-    position: absolute; left: 0; right: 0; bottom: 0; height: 62%; z-index: 30; border-left: 0; border-top: 1px solid var(--line);
-    border-radius: 16px 16px 0 0; box-shadow: 0 -20px 50px rgba(0, 0, 0, .5); transform: translateY(105%); transition: transform .25s ease;
-  }
-  #panel.open { transform: none; }
-  .panel-close { display: grid; place-items: center; background: none; border: 0; padding: 8px 0 2px; cursor: pointer; }
-  .panel-close span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
-  .panel-toggle { display: block; position: absolute; right: 12px; bottom: 12px; z-index: 5; }
-  #views { left: 12px; right: 12px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  #views button { flex: none; }
-  #toasts { bottom: 60px; }
-  .card { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 12px; left: 12px; width: auto; }
-  .brand h1 { font-size: 28px; }
-  .brand p { font-size: 12px; }
-  .wm-hint { display: none; }
-  .bar { grid-template-columns: 110px 1fr 38px; }
+/* ================= Handy-Layout ================= */
+#screen-game {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "top" "map" "tools";
 }
+#topbar { flex-wrap: wrap; gap: 6px 10px; padding: 6px 10px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
+.tb-nation { flex: 1 1 auto; }
+.tb-nation .seal { display: none; }
+.tb-stats { order: 3; flex-basis: 100%; }
+.stat { min-width: 84px; padding: 3px 8px; }
+#toolbar {
+  flex-direction: row; border-right: 0; border-top: 1px solid var(--line); overflow-x: auto; overflow-y: hidden;
+  padding: 6px 8px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.tcat { flex: 1 0 64px; }
+#flyout { left: 8px; right: 8px; width: auto; top: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-height: 55%; }
+#panel {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 62%; z-index: 30; border-left: 0; border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0; box-shadow: 0 -20px 50px rgba(0, 0, 0, .5); transform: translateY(105%); transition: transform .25s ease;
+}
+#panel.open { transform: none; }
+.panel-close { display: grid; place-items: center; background: none; border: 0; padding: 8px 0 2px; cursor: pointer; }
+.panel-close span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
+.panel-toggle { display: block; position: absolute; right: 12px; bottom: 12px; z-index: 5; }
+#views { left: 12px; right: 12px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#views button { flex: none; }
+#toasts { bottom: 60px; }
+.card { top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: 12px; left: 12px; width: auto; }
+.brand h1 { font-size: 28px; }
+.brand p { font-size: 12px; }
+.wm-hint { display: none; }
+.bar { grid-template-columns: 110px 1fr 38px; }
+
+#screen-game { display: grid; }
+#mapWrap { position: relative; }
+.tcat { flex: 1 1 0; min-width: 52px; padding: 6px 0; font-size: 10px; }
+.tcat canvas { width: 30px; height: 30px; }
+#flyout { left: 0; right: 0; bottom: calc(68px + env(safe-area-inset-bottom, 0px)); max-height: 62%; border-radius: 16px 16px 0 0; padding: 10px 10px 14px; }
+.toolgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tool { grid-template-columns: 1fr; justify-items: start; gap: 6px; padding: 10px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 12px; min-height: 120px; align-content: start; }
+.tool canvas { width: 44px; height: 44px; background: var(--ink); border-radius: 8px; }
+.tool .cost { display: block; margin: 1px 0 3px; }
+.tool small { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.zoombtns { position: absolute; display: flex; flex-direction: column; gap: 8px; z-index: 6; }
+.zoombtns button {
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: rgba(17, 27, 37, 0.88);
+  color: var(--paper); font: 600 24px/1 var(--f-body); cursor: pointer; display: grid; place-items: center;
+}
+.zoombtns button:active { background: var(--brass); color: var(--brass-ink); }
+.map-zoom { right: 12px; top: 54px; }
+.wm-zoom { right: 16px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+#actionBar {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8; background: rgba(24, 36, 47, 0.97);
+  border: 1px solid var(--brass); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+}
+.ab-head { display: flex; gap: 10px; align-items: flex-start; }
+#abIcon canvas { width: 34px; height: 34px; border-radius: 8px; background: var(--ink); display: block; }
+.ab-text { min-width: 0; display: flex; flex-direction: column; font-size: 13px; line-height: 1.35; }
+.ab-text b#abName { font: 800 17px/1.1 var(--f-display); text-transform: uppercase; letter-spacing: .03em; }
+#abInfo { color: var(--muted); }
+#abInfo b { color: var(--paper); }
+#abInfo .err { color: #f2a19b; } #abInfo .warn { color: #f5b77a; }
+.ab-btns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.ab-btns .btn { padding: 11px 16px; font-size: 14px; }
+#abOk { min-width: 110px; }
+.btn:active { transform: scale(.97); }
+#actionBar:not([hidden]) ~ .panel-toggle { display: none; }
+#toasts { top: 52px; bottom: auto; left: 10px; right: 68px; flex-direction: column; max-width: none; }
+#views { top: 8px; left: 8px; right: 8px; }
+#views button { padding: 6px 11px; font-size: 12px; }
+.wm-head { left: 12px; right: 12px; flex-direction: column; gap: 10px; }
+.brand { max-width: none; padding: 8px 14px 8px 8px; }
+.search { max-width: none; width: 100%; flex: none; }
+.search input { font-size: 16px; padding: 12px 14px; }
+.wm-hint { display: block; left: 16px; right: 76px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); line-height: 1.4; }
+.card { max-height: 70%; overflow: auto; }
+#btnContinue { align-self: flex-start; }
+.modal-box { padding: 18px; }
+.modal-box h2 { font-size: 26px; }
+.speed button { padding: 8px 9px; }
+.speed svg { width: 15px; height: 15px; }
+.tb-menu { padding: 8px 12px; }
+#topbar { display: flex; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+.tb-menu { padding: 7px 9px; display: grid; place-items: center; }
+.tb-menu svg { fill: var(--paper); display: block; }
+#countryCard:not([hidden]) ~ .wm-zoom, #countryCard:not([hidden]) ~ .wm-hint { display: none; }
+#topbar { gap: 6px 8px; }
+.tb-time { gap: 6px; }
+#tbDate { min-width: 0; font-size: 13px; }

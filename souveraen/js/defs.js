@@ -159,10 +159,10 @@
       { id: 'zone3', name: 'Industriezone', kind: 'zone', zone: 3, cost: 1, desc: 'Werkhallen: viele Jobs, produziert Güter, verschmutzt.' },
       { id: 'zone4', name: 'Grüngürtel', kind: 'zone', zone: 4, cost: 1, desc: 'Schützt Land vor Bebauung. Lenkt das Wachstum.' }
     ] },
-    { key: 'wirtschaft', name: 'Wirtschaft', tools: [10, 11, 12, 13, 14, 15, 16, 17].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'wirtschaft', name: 'Wirtschaft', short: 'Betriebe', tools: [10, 11, 12, 13, 14, 15, 16, 17].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'energie', name: 'Energie', tools: [20, 21, 22, 23, 24].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
-    { key: 'gesellschaft', name: 'Gesellschaft', tools: [30, 31, 32, 33, 34].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
-    { key: 'landschaft', name: 'Landschaft', tools: [
+    { key: 'gesellschaft', name: 'Gesellschaft', short: 'Soziales', tools: [30, 31, 32, 33, 34].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'landschaft', name: 'Landschaft', short: 'Gelände', tools: [
       { id: 't_raise', name: 'Anheben', kind: 'terra', op: 'raise', cost: 6, desc: 'Hebt das Gelände an. Aus Wasser wird Land, aus Hügeln Berge.' },
       { id: 't_lower', name: 'Absenken', kind: 'terra', op: 'lower', cost: 6, desc: 'Senkt das Gelände ab. Tief genug entsteht ein See oder eine Bucht.' },
       { id: 't_flat', name: 'Einebnen', kind: 'terra', op: 'flat', cost: 4, desc: 'Gleicht die Höhe an die Umgebung an.' },

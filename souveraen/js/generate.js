@@ -148,10 +148,10 @@
     const lon0 = box.x0 - pad / k, lon1 = box.x1 + pad / k, lat0 = box.y0 - pad, lat1 = box.y1 + pad;
     wDeg = (lon1 - lon0) * k; hDeg = lat1 - lat0;
     const areaDeg = rings.reduce((s, r) => s + r.area, 0);
-    const longest = Math.round(S.clamp(56 + Math.sqrt(areaDeg) * 6, 64, 128));
+    const longest = Math.round(S.clamp(100 + Math.sqrt(areaDeg) * 9, 120, 192));
     let W, H;
-    if (wDeg >= hDeg) { W = longest; H = Math.max(40, Math.round(longest * hDeg / wDeg)); }
-    else { H = longest; W = Math.max(40, Math.round(longest * wDeg / hDeg)); }
+    if (wDeg >= hDeg) { W = longest; H = Math.max(72, Math.round(longest * hDeg / wDeg)); }
+    else { H = longest; W = Math.max(72, Math.round(longest * wDeg / hDeg)); }
     const N = W * H;
     const kmPerTile = (wDeg * 111) / W;
     const t = S.newTiles(N);
@@ -361,8 +361,8 @@
       const city = S.foundCity(G, c.x, c.y, c.name, style, c.capital ? 'radial' : 'organisch', true);
       city.capital = c.capital;
       city.realPop = c.pop;
-      let target = Math.round(S.clamp(3 + Math.sqrt(c.pop / 50000) * 1.5, 4, 38));
-      target = Math.max(target, Math.round(c.capital ? Math.min(30, G.homeCount / 70) : Math.min(10, G.homeCount / 350)));
+      let target = Math.round(S.clamp(3 + Math.sqrt(c.pop / 50000) * 1.2, 4, 30));
+      target = Math.max(target, Math.round(c.capital ? Math.min(16, G.homeCount / 300) : Math.min(6, G.homeCount / 900)));
       S.growCityInstant(G, city, target, rnd);
     }
 
@@ -467,7 +467,7 @@
       return 1 + (e > S.HILL_E ? 2.5 : 0) + (t.forest[id] ? 0.6 : 0) + (t.river[id] ? 2 : 0);
     };
     let iter = 0;
-    while (open.length && iter++ < 60000) {
+    while (open.length && iter++ < 250000) {
       // einfache Prioritätswarteschlange (binärer Heap)
       const [, cur] = heapPop(open);
       if (cur === goal) break;

@@ -2,7 +2,10 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111b25">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Souverän</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,13 +17,13 @@
 
   <!-- ============ Weltkarte ============ -->
   <section id="screen-world" class="screen">
-    <canvas id="worldCanvas" aria-label="Weltkarte"></canvas>
+    <canvas id="worldCanvas" aria-label="Globus"></canvas>
     <header class="wm-head">
       <div class="brand">
         <span class="seal" aria-hidden="true"></span>
         <div>
           <h1>Souverän</h1>
-          <p>Wähle ein Land der Erde. Regiere es, baue es aus, forme seine Landschaft und Städte.</p>
+          <p>Dreh den Globus und wähle dein Land.</p>
         </div>
       </div>
       <div class="search">
@@ -30,7 +33,6 @@
       </div>
       <button id="btnContinue" class="btn btn-ghost" hidden></button>
     </header>
-    <p class="wm-hint">Ziehen zum Verschieben · Mausrad oder zwei Finger zum Zoomen · Land antippen zum Auswählen</p>
 
     <aside id="countryCard" class="card" hidden>
       <button class="close" data-close="countryCard" aria-label="Schließen">×</button>
@@ -46,6 +48,8 @@
       <p class="cc-diff" id="ccDiff"></p>
       <button id="btnRule" class="btn btn-primary">Dieses Land regieren</button>
     </aside>
+    <p class="wm-hint">Wischen dreht den Globus · zwei Finger zoomen · doppelt tippen zoomt hinein · Land antippen wählt aus</p>
+    <div class="zoombtns wm-zoom"><button id="gZoomIn" aria-label="Hineinzoomen">+</button><button id="gZoomOut" aria-label="Herauszoomen">−</button></div>
 
     <div id="setup" class="modal" hidden>
       <div class="modal-box setup-box" role="dialog" aria-labelledby="setupTitle">
@@ -82,7 +86,7 @@
         </div>
       </div>
       <div class="tb-stats" id="tbStats"></div>
-      <button id="btnMenu" class="btn btn-ghost tb-menu">Menü</button>
+      <button id="btnMenu" class="btn btn-ghost tb-menu" aria-label="Menü"><svg viewBox="0 0 20 20" width="18" height="18"><rect x="2" y="4" width="16" height="2.2" rx="1"/><rect x="2" y="9" width="16" height="2.2" rx="1"/><rect x="2" y="14" width="16" height="2.2" rx="1"/></svg></button>
     </header>
 
     <nav id="toolbar" aria-label="Werkzeuge"></nav>
@@ -91,6 +95,11 @@
     <main id="mapWrap">
       <canvas id="mapCanvas" aria-label="Landeskarte"></canvas>
       <div id="tooltip" hidden></div>
+      <div class="zoombtns map-zoom"><button id="zoomIn" aria-label="Hineinzoomen">+</button><button id="zoomOut" aria-label="Herauszoomen">−</button></div>
+      <div id="actionBar" hidden>
+        <div class="ab-head"><span id="abIcon"></span><div class="ab-text"><b id="abName"></b><span id="abInfo"></span></div></div>
+        <div class="ab-btns"><span id="abExtra"></span><button class="btn" id="abDone">Fertig</button><button class="btn btn-primary" id="abOk" hidden>Bauen</button></div>
+      </div>
       <div id="views" role="group" aria-label="Kartenansicht"></div>
       <div id="toasts" aria-live="polite"></div>
       <button id="btnPanel" class="btn btn-primary panel-toggle">Lage</button>

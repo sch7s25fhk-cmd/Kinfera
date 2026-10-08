@@ -7,13 +7,15 @@
   const R = S.R = { cam: { x: 0, y: 0, z: 1 }, dpr: 1, view: 'none', anim: 0, hover: null, preview: null, sel: null };
 
   // ---------------- Initialisierung ----------------
+  const CH = 16;          // Kacheln pro Zwischenspeicher-Block
+  const OV = 8;           // Pixel pro Kachel in der Übersicht (weit herausgezoomt)
+  const CM = 2;           // Rand in Pixeln, damit Blöcke nahtlos aneinanderstoßen
+  const PIX_BUDGET = 22e6;
+
   R.init = function (G, canvas) {
     R.G = G;
     R.canvas = canvas;
     R.ctx = canvas.getContext('2d');
-    R.cache = document.createElement('canvas');
-    R.cache.width = G.W * TS; R.cache.height = G.H * TS;
-    R.cctx = R.cache.getContext('2d');
     R.terr = document.createElement('canvas');
     R.terr.width = G.W * PX; R.terr.height = G.H * PX;
     R.tctx = R.terr.getContext('2d');
@@ -24,13 +26,23 @@
     R.noiseB = S.makeNoise(G.meta.seed + 502);
     R.dirty = null;
     R.border = buildBorder(G);
-    R.redraw(0, 0, G.W - 1, G.H - 1);
+    R.chunks = new Map();
+    R.pix = 0;
+    R.frame = 0;
+    R.ov = document.createElement('canvas');
+    R.ov.width = G.W * OV; R.ov.height = G.H * OV;
+    R.octx = R.ov.getContext('2d');
+    R.viewCv = document.createElement('canvas');
+    R.viewCv.width = G.W; R.viewCv.height = G.H;
+    R.viewKey = null;
+    terrainPixels(G, 0, 0, G.W - 1, G.H - 1);
+    paintOverview(0, 0, G.W - 1, G.H - 1);
     R.resize();
   };
 
   R.resize = function () {
     const c = R.canvas;
-    R.dpr = Math.min(2, window.devicePixelRatio || 1);
+    R.dpr = Math.min(3, window.devicePixelRatio || 1);
     const r = c.getBoundingClientRect();
     c.width = Math.max(1, Math.round(r.width * R.dpr));
     c.height = Math.max(1, Math.round(r.height * R.dpr));
@@ -41,12 +53,19 @@
     const d = R.dirty;
     if (!d) R.dirty = [x0, y0, x1, y1];
     else { d[0] = Math.min(d[0], x0); d[1] = Math.min(d[1], y0); d[2] = Math.max(d[2], x1); d[3] = Math.max(d[3], y1); }
+    R.viewKey = null;
   };
   R.flush = function () {
     if (!R.dirty) return;
-    const [x0, y0, x1, y1] = R.dirty;
+    const G = R.G;
+    let [x0, y0, x1, y1] = R.dirty;
     R.dirty = null;
-    R.redraw(x0, y0, x1, y1);
+    x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(G.W - 1, x1 + 2); y1 = Math.min(G.H - 1, y1 + 2);
+    terrainPixels(G, x0, y0, x1, y1);
+    paintOverview(x0, y0, x1, y1);
+    // betroffene Blöcke als veraltet markieren (hohe Gebäude ragen nach oben)
+    const cx0 = Math.floor(x0 / CH), cx1 = Math.floor(x1 / CH), cy0 = Math.floor((y0 - 3) / CH), cy1 = Math.floor((y1 + 1) / CH);
+    for (const e of R.chunks.values()) if (e.cx >= cx0 && e.cx <= cx1 && e.cy >= cy0 && e.cy <= cy1) e.stale = true;
   };
 
   // ---------------- Gelände als Pixelbild ----------------
@@ -124,12 +143,9 @@
     return segs;
   }
 
-  // ---------------- Zwischenspeicher neu zeichnen ----------------
-  R.redraw = function (x0, y0, x1, y1) {
+  // ---------------- Bereich zeichnen (Weltkoordinaten) ----------------
+  function paintRegion(c, x0, y0, x1, y1) {
     const G = R.G, { W, H } = G;
-    x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(W - 1, x1 + 1); y1 = Math.min(H - 1, y1 + 1);
-    terrainPixels(G, x0 - 1, y0 - 1, x1 + 1, y1 + 1);
-    const c = R.cctx;
     c.save();
     c.beginPath();
     c.rect(x0 * TS, y0 * TS, (x1 - x0 + 1) * TS, (y1 - y0 + 1) * TS);
@@ -139,10 +155,8 @@
     c.imageSmoothingQuality = 'high';
     c.drawImage(R.terr, sx0 * PX, sy0 * PX, (sx1 - sx0) * PX, (sy1 - sy0) * PX, sx0 * TS, sy0 * TS, (sx1 - sx0) * TS, (sy1 - sy0) * TS);
     const gx0 = Math.max(0, x0 - 2), gy0 = Math.max(0, y0 - 2), gx1 = Math.min(W - 1, x1 + 2), gy1 = Math.min(H - 1, y1 + 2);
-    // Boden: Flüsse, Bewässerung, Zonen, Stadtflächen, Straßen
     for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawGround(c, G, x, y);
     for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawRoads(c, G, x, y);
-    // Grenze
     c.strokeStyle = 'rgba(70,40,30,0.55)';
     c.lineWidth = 3;
     c.setLineDash([7, 5]);
@@ -153,11 +167,116 @@
     }
     c.stroke();
     c.setLineDash([]);
-    // Objekte zeilenweise (hohe Gebäude ragen nach oben)
     const oy1 = Math.min(H - 1, y1 + 3);
     for (let y = gy0; y <= oy1; y++) for (let x = gx0; x <= gx1; x++) drawObject(c, G, x, y);
     c.restore();
-  };
+  }
+
+  /** Einen Block in der gewünschten Auflösung (Pixel pro Weltpixel) zeichnen */
+  function renderChunk(cx, cy, res, reuse) {
+    const G = R.G;
+    const x0 = cx * CH, y0 = cy * CH, x1 = Math.min(G.W - 1, x0 + CH - 1), y1 = Math.min(G.H - 1, y0 + CH - 1);
+    const w = Math.ceil((x1 - x0 + 1) * TS * res) + CM * 2, h = Math.ceil((y1 - y0 + 1) * TS * res) + CM * 2;
+    const cv = reuse && reuse.width === w && reuse.height === h ? reuse : document.createElement('canvas');
+    if (cv !== reuse) { cv.width = w; cv.height = h; }
+    const c = cv.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, w, h);
+    c.setTransform(res, 0, 0, res, CM - x0 * TS * res, CM - y0 * TS * res);
+    // Rand mitzeichnen: Bereich um eine Kachel erweitert, dann auf den Block plus Rand beschneiden
+    paintRegion(c, Math.max(0, x0 - 1), Math.max(0, y0 - 1), Math.min(G.W - 1, x1 + 1), Math.min(G.H - 1, y1 + 1));
+    return { cv, x0, y0, x1, y1, w, h };
+  }
+
+  function getChunk(cx, cy, res, allowRender) {
+    const key = cx + ',' + cy + ',' + res;
+    let e = R.chunks.get(key);
+    if (e && !e.stale) { e.used = R.frame; return e; }
+    if (!allowRender) return null;
+    const r = renderChunk(cx, cy, res, e && e.cv);
+    if (!e) { e = { cx, cy, res }; R.chunks.set(key, e); }
+    else R.pix -= e.w * e.h;
+    Object.assign(e, r, { stale: false, used: R.frame });
+    R.pix += e.w * e.h;
+    evict();
+    return e;
+  }
+
+  function evict() {
+    if (R.pix <= PIX_BUDGET) return;
+    const list = [...R.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
+    for (const [k, e] of list) {
+      if (R.pix <= PIX_BUDGET * 0.8 || e.used >= R.frame) break;
+      R.pix -= e.w * e.h;
+      R.chunks.delete(k);
+    }
+  }
+
+  // ---------------- Übersichtskarte (weit herausgezoomt) ----------------
+  const OV_URBAN = { 2: '#8fa3b6', 3: '#8a7f74', 4: '#e8b23a' };
+  function paintOverview(x0, y0, x1, y1) {
+    const G = R.G, t = G.t, W = G.W, c = R.octx;
+    c.save();
+    c.beginPath(); c.rect(x0 * OV, y0 * OV, (x1 - x0 + 1) * OV, (y1 - y0 + 1) * OV); c.clip();
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    const sx0 = Math.max(0, x0 - 1), sy0 = Math.max(0, y0 - 1), sx1 = Math.min(W, x1 + 2), sy1 = Math.min(G.H, y1 + 2);
+    c.drawImage(R.terr, sx0 * PX, sy0 * PX, (sx1 - sx0) * PX, (sy1 - sy0) * PX, sx0 * OV, sy0 * OV, (sx1 - sx0) * OV, (sy1 - sy0) * OV);
+    const ex0 = Math.max(0, x0 - 1), ey0 = Math.max(0, y0 - 1), ex1 = Math.min(W - 1, x1 + 1), ey1 = Math.min(G.H - 1, y1 + 1);
+    c.lineCap = 'round';
+    // Flüsse
+    c.strokeStyle = '#3f86b8'; c.lineWidth = 2;
+    c.beginPath();
+    for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
+      const id = y * W + x;
+      if (!t.river[id] || t.rdir[id] < 0) continue;
+      const [ox, oy] = S.N4[t.rdir[id]];
+      c.moveTo((x + 0.5) * OV, (y + 0.5) * OV); c.lineTo((x + ox + 0.5) * OV, (y + oy + 0.5) * OV);
+    }
+    c.stroke();
+    for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
+      const id = y * W + x, b = t.bld[id];
+      if (!b) continue;
+      if (b === U.R) {
+        const city = G.cities[t.city[id] - 1];
+        c.fillStyle = city ? S.STYLES[city.style].roof : '#b5533a';
+        c.fillRect(x * OV + 0.5, y * OV + 0.5, OV - 1, OV - 1);
+        if (t.lvl[id] >= 3) { c.fillStyle = 'rgba(0,0,0,' + (t.lvl[id] * 0.06).toFixed(2) + ')'; c.fillRect(x * OV + 2, y * OV + 2, OV - 4, OV - 4); }
+      } else if (b <= 4) {
+        c.fillStyle = OV_URBAN[b]; c.fillRect(x * OV + 0.5, y * OV + 0.5, OV - 1, OV - 1);
+      } else {
+        const d = S.BLD[b];
+        c.fillStyle = b === 10 ? '#d8c25a' : b === 32 ? '#6fae55' : d.cat === 'energie' ? '#3b3e4a' : d.cat === 'gesellschaft' ? '#e9e2d0' : '#7a5a44';
+        c.fillRect(x * OV + 1, y * OV + 1, OV - 2, OV - 2);
+      }
+    }
+    // Straßen und Bahn
+    for (const [bit, col, w] of [[1, '#6f6a62', 2], [2, '#2e2b29', 1.5]]) {
+      c.strokeStyle = col; c.lineWidth = w;
+      c.beginPath();
+      for (let y = ey0; y <= ey1; y++) for (let x = ex0; x <= ex1; x++) {
+        const id = y * W + x;
+        if (!(t.road[id] & bit)) continue;
+        let any = false;
+        for (const [ox, oy] of S.N8) {
+          const nx = x + ox, ny = y + oy;
+          if (!S.inb(G, nx, ny) || !(t.road[ny * W + nx] & bit)) continue;
+          if (ox && oy && ((t.road[y * W + nx] & bit) || (t.road[ny * W + x] & bit))) continue;
+          c.moveTo((x + 0.5) * OV, (y + 0.5) * OV); c.lineTo((x + 0.5 + ox * 0.5) * OV, (y + 0.5 + oy * 0.5) * OV);
+          any = true;
+        }
+        if (!any) { c.moveTo((x + 0.3) * OV, (y + 0.5) * OV); c.lineTo((x + 0.7) * OV, (y + 0.5) * OV); }
+      }
+      c.stroke();
+    }
+    c.strokeStyle = 'rgba(70,40,30,0.6)'; c.lineWidth = 1.5; c.setLineDash([4, 3]);
+    c.beginPath();
+    for (const s of R.border) {
+      if (s[2] < ex0 || s[0] > ex1 + 1 || s[3] < ey0 || s[1] > ey1 + 1) continue;
+      c.moveTo(s[0] * OV, s[1] * OV); c.lineTo(s[2] * OV, s[3] * OV);
+    }
+    c.stroke(); c.setLineDash([]);
+    c.restore();
+  }
 
   // ---------------- Boden ----------------
   const GROUND = { historisch: '#c9bca2', modern: '#b4b9be', garten: '#a9c785', industrie: '#a2978a', mediterran: '#e6d9bd' };
@@ -819,6 +938,7 @@
   }
 
   // ---------------- Bildaufbau pro Frame ----------------
+  R.MAX_Z = 4;
   R.worldToScreen = (wx, wy) => [(wx - R.cam.x) * R.cam.z + R.cw / 2, (wy - R.cam.y) * R.cam.z + R.ch / 2];
   R.screenToWorld = (sx, sy) => [(sx - R.cw / 2) / R.cam.z + R.cam.x, (sy - R.ch / 2) / R.cam.z + R.cam.y];
   R.screenToTile = (sx, sy) => { const [wx, wy] = R.screenToWorld(sx, sy); return [Math.floor(wx / TS), Math.floor(wy / TS)]; };
@@ -826,7 +946,7 @@
   R.clampCam = function () {
     const G = R.G, cam = R.cam;
     const minZ = Math.min(R.cw / (G.W * TS), R.ch / (G.H * TS)) * 0.8;
-    cam.z = S.clamp(cam.z, Math.min(minZ, 0.3), 3);
+    cam.z = S.clamp(cam.z, Math.min(minZ, 0.3), R.MAX_Z);
     const ax = (size, view) => {
       const half = view / 2 / cam.z;
       if (size <= 2 * half) return [size / 2 - (half - size / 2) * 0.5, size / 2 + (half - size / 2) * 0.5];
@@ -879,32 +999,71 @@
     }
   };
 
+  function viewLayer(G) {
+    const vf = VIEW_FN[R.view];
+    const key = R.view + ':' + G.month;
+    if (R.viewKey === key) return;
+    R.viewKey = key;
+    const c = R.viewCv.getContext('2d');
+    const img = c.createImageData(G.W, G.H), d = img.data;
+    for (let i = 0; i < G.W * G.H; i++) {
+      const v = vf(G, i);
+      if (!v) continue;
+      const rgb = v[1].split(',');
+      d[i * 4] = +rgb[0]; d[i * 4 + 1] = +rgb[1]; d[i * 4 + 2] = +rgb[2]; d[i * 4 + 3] = Math.round((0.15 + v[0] * 0.55) * 255);
+    }
+    c.putImageData(img, 0, 0);
+  }
+
   R.draw = function (time) {
     const G = R.G, c = R.ctx, cam = R.cam, z = cam.z;
     if (!G) return;
+    R.frame++;
     R.flush();
     c.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
     c.fillStyle = '#16283a';
     c.fillRect(0, 0, R.cw, R.ch);
     c.setTransform(R.dpr * z, 0, 0, R.dpr * z, R.dpr * (R.cw / 2 - cam.x * z), R.dpr * (R.ch / 2 - cam.y * z));
-    c.imageSmoothingEnabled = z < 1.6;
+    c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
     c.fillStyle = 'rgba(0,0,0,0.35)';
     c.fillRect(6 / z, 8 / z, G.W * TS, G.H * TS);
-    c.drawImage(R.cache, 0, 0);
     // sichtbarer Ausschnitt in Kacheln
     const [wx0, wy0] = R.screenToWorld(0, 0), [wx1, wy1] = R.screenToWorld(R.cw, R.ch);
     const x0 = Math.max(0, Math.floor(wx0 / TS) - 1), y0 = Math.max(0, Math.floor(wy0 / TS) - 1);
     const x1 = Math.min(G.W - 1, Math.ceil(wx1 / TS) + 1), y1 = Math.min(G.H - 1, Math.ceil(wy1 / TS) + 2);
-    // Datenansicht
-    const vf = VIEW_FN[R.view];
-    if (vf) {
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        const v = vf(G, y * G.W + x);
-        if (!v) continue;
-        c.fillStyle = 'rgba(' + v[1] + ',' + (0.15 + v[0] * 0.55).toFixed(2) + ')';
-        c.fillRect(x * TS, y * TS, TS, TS);
+    const need = z * R.dpr;
+    const ovRes = OV / TS;
+    // Übersicht immer als Grundlage (verdeckt Lücken, solange Blöcke entstehen)
+    c.drawImage(R.ov, 0, 0, G.W * TS, G.H * TS);
+    if (need > ovRes * 1.3) {
+      const res = need <= 0.6 ? 0.5 : need <= 1.2 ? 1 : need <= 2.4 ? 2 : need <= 3.4 ? 3 : 4;
+      const cx0 = Math.floor(x0 / CH), cx1 = Math.floor(x1 / CH), cy0 = Math.floor(y0 / CH), cy1 = Math.floor(y1 / CH);
+      let budget = 3;
+      const ccx = (cam.x / TS) / CH, ccy = (cam.y / TS) / CH;
+      const order = [];
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) order.push([cx, cy, Math.hypot(cx + 0.5 - ccx, cy + 0.5 - ccy)]);
+      order.sort((a, b) => a[2] - b[2]);
+      for (const [cx, cy] of order) {
+        let e = getChunk(cx, cy, res, false);
+        if (!e && budget > 0) { e = getChunk(cx, cy, res, true); budget--; }
+        if (!e) {
+          // Ersatz: andere Auflösung oder veraltete Fassung
+          for (const r2 of [res, 2, 1, 4, 3, 0.5]) { const f = R.chunks.get(cx + ',' + cy + ',' + r2); if (f) { e = f; f.used = R.frame; break; } }
+        }
+        if (!e) continue;
+        const r = e.res, iw = (e.x1 - e.x0 + 1) * TS, ih = (e.y1 - e.y0 + 1) * TS;
+        const ex = 1 / need;
+        c.drawImage(e.cv, CM, CM, Math.min(e.w - CM, iw * r + ex * r), Math.min(e.h - CM, ih * r + ex * r), e.x0 * TS, e.y0 * TS, iw + ex, ih + ex);
       }
+      if (budget <= 0 || [...R.chunks.values()].some(e => e.stale && e.used >= R.frame - 1)) R.needsMore = true;
+    }
+    // Datenansicht
+    if (VIEW_FN[R.view]) {
+      viewLayer(G);
+      c.imageSmoothingEnabled = false;
+      c.drawImage(R.viewCv, 0, 0, G.W * TS, G.H * TS);
+      c.imageSmoothingEnabled = true;
     }
     // Rauch und Dampf
     if (z > 0.55 && !R.reduceMotion) drawSmoke(c, G, x0, y0, x1, y1, time);

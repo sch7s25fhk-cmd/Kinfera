@@ -85,7 +85,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Gebäude** in Schrägansicht mit Schatten; jeder Stadtstil hat eigene Farben und Bauformen. Rauch aus Schloten, Dampf aus Kühltürmen.
 - **Datenansichten:** Wohndichte, Zufriedenheit, Verschmutzung, Fruchtbarkeit, Rohstoffe, Verkehrsnetz.
 - Werkzeug-Symbole sind Miniaturen der echten Gebäude auf der Karte.
-- **Zoom** von der ganzen Landesübersicht bis zu einzelnen Häusern (4-fach). Die Karte wird in Blöcken gezeichnet, deren Schärfe der Zoomstufe folgt; weit herausgezoomt zeigt eine Übersichtskarte Städte, Straßen und Flüsse.
+- **Zoom** vom ganzen Erdball über die Landesübersicht bis zu einzelnen Häusern (4-fach). Wer über die Landeskarte hinaus herauszoomt, fliegt nahtlos auf den Globus, auf dem das eigene Land golden leuchtet; Hineinzoomen bringt einen zurück. Das Spiel läuft dabei weiter. Die Karte wird in Blöcken gezeichnet, deren Schärfe der Zoomstufe folgt; weit herausgezoomt zeigt eine Übersichtskarte Städte, Straßen und Flüsse.
 
 ### Touch-Steuerung
 

@@ -1,10 +1,15 @@
-/* Souverän – 3D-Globus zur Wahl des Landes (orthografische Projektion, Touch-Steuerung) */
+/* Souverän – 3D-Globus (orthografische Projektion, Touch-Steuerung)
+   Zwei Instanzen: die Länderwahl (S.WM) und die Weltansicht im Spiel (herausgezoomt). */
 'use strict';
 (function (S) {
   const D2R = Math.PI / 180;
-  const WM = S.WM = {
+  let ITEMS = null; // Länderdaten werden von allen Globen geteilt
+
+  S.makeGlobe = function (opts) {
+  opts = opts || {};
+  const WM = {
     lon: 10, lat: 25, zoom: 1, sel: null, hover: null,
-    vLon: 0, vLat: 0, anim: null, idle: true
+    vLon: 0, vLat: 0, anim: null, idle: !opts.noIdle, maxZoom: opts.maxZoom || 60
   };
 
   const PALETTE = ['#c9b98f', '#a9bf8e', '#d4a77f', '#b7a6c9', '#9fc0b9', '#d9c27a', '#c4a0a0', '#a8b5c9'];
@@ -17,7 +22,7 @@
     WM.canvas = canvas;
     WM.ctx = canvas.getContext('2d');
     WM.onSelect = onSelect;
-    WM.items = S.WORLD.map(c => {
+    WM.items = ITEMS || (ITEMS = S.WORLD.map(c => {
       const rings = [], ll = [];
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, lbest = -1, lbox = null;
       let sx = 0, sy = 0, sz = 0;
@@ -50,7 +55,7 @@
       }
       let mainRad = Math.max(0.004, Math.max((lbox[2] - lbox[0]) * Math.cos(cLat * D2R), lbox[3] - lbox[1]) * D2R / 2);
       return { c, rings, ll, box: [x0, y0, x1, y1], lbox, center, cLon, cLat, rad, mainRad, area: lbest, color: PALETTE[(c.c || 1) % PALETTE.length] };
-    });
+    }));
     // Gradnetz
     WM.grid = [];
     for (let lon = -180; lon < 180; lon += 30) { const l = []; for (let lat = -88; lat <= 88; lat += 4) l.push(toXYZ(lon, lat)); WM.grid.push(l); }
@@ -71,7 +76,7 @@
   };
 
   const radius = () => WM.baseR * WM.zoom;
-  const center = () => [WM.cw / 2, WM.ch * 0.46];
+  const center = () => [WM.cw / 2, WM.ch * (opts.cy || 0.46)];
 
   function matrix() {
     const l = WM.lon * D2R, p = WM.lat * D2R;
@@ -127,7 +132,7 @@
   WM.focus = function (item) {
     const R0 = WM.baseR;
     const want = Math.min(WM.cw, WM.ch) * 0.3;
-    const zoom = S.clamp(want / (R0 * Math.sin(Math.min(1.2, item.mainRad * 1.15))), 1, 60);
+    const zoom = S.clamp(want / (R0 * Math.sin(Math.min(1.2, item.mainRad * 1.15))), 1, WM.maxZoom);
     WM.anim = { lon0: WM.lon, lat0: WM.lat, z0: WM.zoom, lon1: item.cLon, lat1: S.clamp(item.cLat, -70, 75), z1: zoom, t: 0 };
     let d = WM.anim.lon1 - WM.anim.lon0;
     while (d > 180) d -= 360; while (d < -180) d += 360;
@@ -138,7 +143,7 @@
   function step(dt) {
     if (WM.anim) {
       const a = WM.anim;
-      a.t = Math.min(1, a.t + dt / 900);
+      a.t = Math.min(1, a.t + dt / (a.ms || 900));
       const e = a.t < 0.5 ? 2 * a.t * a.t : 1 - Math.pow(-2 * a.t + 2, 2) / 2;
       WM.lon = a.lon0 + (a.lon1 - a.lon0) * e;
       WM.lat = a.lat0 + (a.lat1 - a.lat0) * e;
@@ -162,6 +167,7 @@
     const dt = lastT ? Math.min(50, (now || performance.now()) - lastT) : 16;
     lastT = now || performance.now();
     step(dt);
+    if (opts.onFrame) opts.onFrame(WM);
     const dpr = WM.dpr, W = WM.cw, H = WM.ch;
     const [cx, cy] = center(), R = radius();
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -291,7 +297,7 @@
       if (ptrs.size >= 2 && pinch) {
         const [a, b] = [...ptrs.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        WM.zoom = S.clamp(pinch.z * d / pinch.d, 0.7, 60);
+        WM.zoom = S.clamp(pinch.z * d / pinch.d, 0.7, WM.maxZoom);
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         rotateBy(mx - pinch.mx, my - pinch.my);
         pinch.mx = mx; pinch.my = my;
@@ -320,7 +326,7 @@
           const now = performance.now();
           if (now - lastTap < 300) {
             // Doppeltippen: hineinzoomen
-            WM.anim = { lon0: WM.lon, lat0: WM.lat, z0: WM.zoom, lon1: WM.lon, lat1: WM.lat, z1: Math.min(60, WM.zoom * 2.2), t: 0 };
+            WM.anim = { lon0: WM.lon, lat0: WM.lat, z0: WM.zoom, lon1: WM.lon, lat1: WM.lat, z1: Math.min(WM.maxZoom, WM.zoom * 2.2), t: 0 };
             const p = unproject(e.offsetX, e.offsetY);
             if (p) { WM.anim.lon1 = WM.lon + angleDiff(p[0], WM.lon) * 0.6; WM.anim.lat1 = S.clamp(WM.lat + (p[1] - WM.lat) * 0.6, -75, 80); }
             lastTap = 0;
@@ -342,7 +348,7 @@
     cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') WM.hover = null; });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault(); stopIdle();
-      WM.zoom = S.clamp(WM.zoom * Math.exp(-e.deltaY * 0.0015), 0.7, 60);
+      WM.zoom = S.clamp(WM.zoom * Math.exp(-e.deltaY * 0.0015), 0.7, WM.maxZoom);
     }, { passive: false });
   }
   const angleDiff = (a, b) => { let d = a - b; while (d > 180) d -= 360; while (d < -180) d += 360; return d; };
@@ -353,8 +359,28 @@
     WM.lat = S.clamp(WM.lat + dy / R / D2R, -80, 80);
   }
 
-  WM.zoomBy = function (f) { stopAnim(); WM.zoom = S.clamp(WM.zoom * f, 0.7, 60); };
+  WM.zoomBy = function (f) { stopAnim(); WM.zoom = S.clamp(WM.zoom * f, 0.7, WM.maxZoom); };
   function stopAnim() { WM.anim = null; WM.idle = false; }
+
+  /** Kamera sofort auf ein Land setzen (Zoom so, dass es etwa `frac` des Bildschirms füllt) */
+  WM.lookAt = function (item, frac) {
+    WM.lon = item.cLon; WM.lat = S.clamp(item.cLat, -75, 80);
+    WM.zoom = WM.zoomFor(item, frac);
+    WM.vLon = 0; WM.vLat = 0; WM.anim = null; WM.idle = false;
+  };
+  WM.zoomFor = (item, frac) => S.clamp(Math.min(WM.cw, WM.ch) * frac / 2 / (WM.baseR * Math.sin(Math.min(1.2, item.mainRad * 1.1))), 0.7, WM.maxZoom);
+  /** Weicher Kameraflug */
+  WM.flyTo = function (lon, lat, zoom, ms) {
+    let d = lon - WM.lon; while (d > 180) d -= 360; while (d < -180) d += 360;
+    WM.anim = { lon0: WM.lon, lat0: WM.lat, z0: WM.zoom, lon1: WM.lon + d, lat1: lat, z1: zoom, t: 0, ms: ms || 900 };
+    WM.idle = false;
+  };
+  WM.itemById = (id) => WM.items.find(it => it.c.id === id);
+
+  return WM;
+  };
+
+  const WM = S.WM = S.makeGlobe();
 
   /** Kleine Umriss-Vorschau eines Landes für die Infokarte */
   WM.shapePreview = function (canvas, item) {

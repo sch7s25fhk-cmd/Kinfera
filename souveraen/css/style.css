@@ -378,3 +378,14 @@ button { font: inherit; color: inherit; }
 #topbar { gap: 6px 8px; }
 .tb-time { gap: 6px; }
 #tbDate { min-width: 0; font-size: 13px; }
+
+#globeCanvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; z-index: 2; }
+#globeBar {
+  position: absolute; left: 8px; right: 8px; top: 8px; z-index: 7; display: flex; gap: 10px; align-items: center;
+  background: rgba(17, 27, 37, 0.9); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 12.5px; color: var(--muted);
+}
+#globeBar b { display: block; color: var(--brass); font: 800 15px/1.1 var(--f-display); text-transform: uppercase; letter-spacing: .04em; }
+#globeBar span { flex: 1; min-width: 0; }
+#globeBar .btn { flex: none; }
+.globe-on #views { display: none; }
+.globe-on .map-zoom { top: 74px; }

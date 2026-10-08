@@ -53,7 +53,7 @@
     if (info) { btn.hidden = false; btn.textContent = 'Weiterspielen: ' + info.name + ', ' + S.dateStr(info.month); }
     else btn.hidden = true;
   }
-  S.toWorld = function () { G = null; S.UI.G = null; S.R.G = null; showWorld(); };
+  S.toWorld = function () { if (S.UI.globeMode) S.UI.exitGlobe(true); G = null; S.UI.G = null; S.R.G = null; showWorld(); };
 
   function selectCountry(item) {
     selected = item;
@@ -183,8 +183,8 @@
           if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
         }
       }
-      S.UI.frame(dt);
-      S.R.draw(now);
+      if (S.UI.globeMode) S.UI.globe.draw(now);
+      else { S.UI.frame(dt); S.R.draw(now); }
     }
     requestAnimationFrame(loop);
   }
@@ -196,7 +196,7 @@
     $('gZoomOut').addEventListener('click', () => S.WM.zoomBy(1 / 1.6));
     window.addEventListener('resize', () => {
       S.WM.resize();
-      if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); }
+      if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); if (S.UI.globe) S.UI.globe.resize(); }
     });
     document.addEventListener('visibilitychange', () => { if (document.hidden && G) S.save(G); });
     const hot = window.claude && window.claude.hot;

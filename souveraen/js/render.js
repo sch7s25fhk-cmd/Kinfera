@@ -939,6 +939,7 @@
 
   // ---------------- Bildaufbau pro Frame ----------------
   R.MAX_Z = 4;
+  R.minZoom = () => Math.min(Math.min(R.cw / (R.G.W * TS), R.ch / (R.G.H * TS)) * 0.8, 0.3);
   R.worldToScreen = (wx, wy) => [(wx - R.cam.x) * R.cam.z + R.cw / 2, (wy - R.cam.y) * R.cam.z + R.ch / 2];
   R.screenToWorld = (sx, sy) => [(sx - R.cw / 2) / R.cam.z + R.cam.x, (sy - R.ch / 2) / R.cam.z + R.cam.y];
   R.screenToTile = (sx, sy) => { const [wx, wy] = R.screenToWorld(sx, sy); return [Math.floor(wx / TS), Math.floor(wy / TS)]; };

@@ -13,6 +13,7 @@
   UI.initGame = function (G) {
     UI.G = G;
     UI.tool = 'inspect'; UI.cat = null; UI.sel = null; R.sel = null; R.selCity = null;
+    if (UI.globeMode) UI.exitGlobe(true);
     $('tbName').textContent = G.meta.name;
     const gov = S.GOVS[G.meta.gov];
     $('tbRuler').textContent = G.meta.ruler ? gov.title + ' ' + G.meta.ruler : gov.name;
@@ -76,6 +77,7 @@
   }
 
   UI.selectTool = function (id) {
+    if (id !== 'inspect' && UI.globeMode) UI.exitGlobe();
     UI.tool = id;
     UI.pending = null;
     R.preview = null;
@@ -538,6 +540,11 @@
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         // Weltpunkt unter der alten Fingermitte festhalten, dann neue Mitte folgen lassen
+        // weiter herauszoomen als die ganze Karte: Weltansicht (Globus)
+        if (R.cam.z <= R.minZoom() * 1.001 && d < st.d) {
+          st.over = (st.over || 1) * d / st.d;
+          if (st.over < 0.72) { mode = null; ptrs.clear(); UI.enterGlobe(); return; }
+        } else st.over = 1;
         const [wx, wy] = R.screenToWorld(st.mx, st.my);
         R.cam.z = S.clamp(st.z * d / st.d, 0.02, R.MAX_Z);
         R.clampCam();
@@ -592,8 +599,15 @@
     cv.addEventListener('pointerup', end);
     cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) mode = null; });
     cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !mode) { R.hover = null; hideTip(); } });
+    let wheelOver = 1;
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
+      if (e.deltaY > 0 && R.cam.z <= R.minZoom() * 1.001) {
+        wheelOver *= Math.exp(-e.deltaY * 0.0015);
+        if (wheelOver < 0.7) { wheelOver = 1; UI.enterGlobe(); }
+        return;
+      }
+      wheelOver = 1;
       const [wx, wy] = R.screenToWorld(e.offsetX, e.offsetY);
       R.cam.z *= Math.exp(-e.deltaY * 0.0015);
       R.clampCam();
@@ -601,8 +615,88 @@
       R.cam.y = wy - (e.offsetY - R.ch / 2) / R.cam.z;
       R.clampCam();
     }, { passive: false });
-    $('zoomIn').addEventListener('click', () => zoomAt(R.cw / 2, R.ch / 2, 1.8));
-    $('zoomOut').addEventListener('click', () => zoomAt(R.cw / 2, R.ch / 2, 1 / 1.8));
+    $('zoomIn').addEventListener('click', () => { if (UI.globeMode) UI.globe.zoomBy(1.6); else zoomAt(R.cw / 2, R.ch / 2, 1.8); });
+    $('zoomOut').addEventListener('click', () => {
+      if (UI.globeMode) UI.globe.zoomBy(1 / 1.6);
+      else if (R.cam.z <= R.minZoom() * 1.02) UI.enterGlobe();
+      else zoomAt(R.cw / 2, R.ch / 2, 1 / 1.8);
+    });
+    $('btnBackToLand').addEventListener('click', () => flyHome());
+  }
+
+  // ======================= Weltansicht (Globus im Spiel) =======================
+  UI.globeMode = false;
+  const D2R = Math.PI / 180;
+  function landRad() {
+    const G = UI.G, latC = (G.lat0 + G.lat1) / 2;
+    return Math.max((G.lon1 - G.lon0) * Math.cos(latC * D2R), G.lat1 - G.lat0) / 2 * D2R;
+  }
+  /** Zoom, bei dem das Kartengebiet `frac` der kürzeren Bildschirmseite füllt */
+  function zoomForLand(frac) {
+    const g = UI.globe;
+    return S.clamp(Math.min(g.cw, g.ch) * frac / 2 / (g.baseR * Math.sin(Math.min(1.2, landRad()))), 0.7, g.maxZoom);
+  }
+
+  UI.enterGlobe = function () {
+    if (UI.globeMode || !UI.G) return;
+    const G = UI.G;
+    UI.globeMode = true;
+    UI.tool = 'inspect'; UI.pending = null; R.preview = null; R.vel = null; R.zoomAnim = null;
+    closeFlyout(); markToolbar(); syncPreview();
+    $('mapWrap').classList.add('globe-on');
+    $('globeCanvas').hidden = false; $('globeBar').hidden = false;
+    if (!UI.globe) {
+      UI.globe = S.makeGlobe({ noIdle: true, cy: 0.52, maxZoom: 300, onFrame: globeFrame });
+      UI.globe.init($('globeCanvas'), globeTap);
+    }
+    const g = UI.globe;
+    g.resize();
+    g.sel = g.itemById(G.meta.id) || null;
+    const lonC = (G.lon0 + G.lon1) / 2, latC = S.clamp((G.lat0 + G.lat1) / 2, -75, 80);
+    // Start: das Land so groß wie eben auf der Karte, dann zurück ins All
+    g.lon = lonC; g.lat = latC; g.zoom = zoomForLand(0.8);
+    g.vLon = 0; g.vLat = 0;
+    g.flyTo(lonC, latC, Math.max(1, Math.min(g.zoom, zoomForLand(0.22))), 1100);
+    UI.globeT = performance.now();
+    vibrate(8);
+  };
+
+  UI.exitGlobe = function (silent) {
+    if (!UI.globeMode) return;
+    UI.globeMode = false;
+    $('mapWrap').classList.remove('globe-on');
+    $('globeCanvas').hidden = true; $('globeBar').hidden = true;
+    if (silent) return;
+    const G = UI.G;
+    const fitZ = Math.min(R.cw / (G.W * TS()), R.ch / (G.H * TS())) * 0.95;
+    R.cam.x = G.W * TS() / 2; R.cam.y = G.H * TS() / 2; R.cam.z = R.minZoom();
+    R.zoomAnim = { z0: R.cam.z, z1: fitZ, wx: R.cam.x, wy: R.cam.y, sx: R.cw / 2, sy: R.ch / 2, t: 0 };
+  };
+  const TS = () => S.TS;
+
+  function flyHome() {
+    const G = UI.G, g = UI.globe;
+    g.flyTo((G.lon0 + G.lon1) / 2, S.clamp((G.lat0 + G.lat1) / 2, -75, 80), zoomForLand(0.95), 700);
+    UI.globeT = performance.now() - 2000;
+  }
+
+  /** Pro Bild: Rückkehr, sobald das eigene Land den Bildschirm füllt */
+  function globeFrame(g) {
+    if (!UI.globeMode || g.anim || performance.now() - UI.globeT < 1300) return;
+    const size = g.zoom * g.baseR * Math.sin(Math.min(1.2, landRad())) * 2;
+    // nur zurück, wenn das Land ungefähr in der Mitte ist
+    const G = UI.G;
+    let dLon = (G.lon0 + G.lon1) / 2 - g.lon; while (dLon > 180) dLon -= 360; while (dLon < -180) dLon += 360;
+    const off = Math.hypot(dLon * Math.cos(g.lat * D2R), (G.lat0 + G.lat1) / 2 - g.lat) * D2R;
+    if (size > Math.min(g.cw, g.ch) * 0.9 && off < landRad() * 1.2 + 0.02) UI.exitGlobe();
+  }
+
+  function globeTap(item) {
+    const G = UI.G, g = UI.globe;
+    const own = g.itemById(G.meta.id);
+    g.sel = own;
+    if (item === own) { flyHome(); return; }
+    UI.toast(item.c.n + ' · ' + S.fmtPop(item.c.pop) + ' Einwohner', 'info', 2200);
   }
 
   /** Weiches Zoomen um einen Bildschirmpunkt */
@@ -938,7 +1032,7 @@
       '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zu einer Stadt führt. Städte ohne Verbindung zur Hauptstadt sind unzufrieden.</p>' +
       '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
-      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
+      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Zoomst du über die ganze Karte hinaus, erscheint dein Land auf dem Globus – hineinzoomen oder das Land antippen bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Monat dauert 6 Sekunden, schneller geht es mit den Pfeilen oben. Pause hält alles an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());

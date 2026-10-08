@@ -27,6 +27,7 @@ python3 tools/build_single.py            # schreibt dist/souveraen.html
 | Globus drehen | mit einem Finger wischen (mit Schwung) |
 | Zoomen (Globus und Karte) | zwei Finger, doppelt tippen oder die Knöpfe + / − |
 | Karte verschieben | ein Finger |
+| Weltansicht im Spiel | über die ganze Landeskarte hinaus herauszoomen (oder − am kleinsten Zoom); zurück durch Hineinzoomen, Antippen des eigenen Landes oder „Zum Land“ |
 | Gebäude, Stadt gründen, Abriss | Werkzeug wählen, Bauplatz antippen, „Bauen“ bestätigen |
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |

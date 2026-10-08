@@ -251,6 +251,62 @@
     return [Math.floor(gx), Math.floor(S.World.gyOf(lat) - G.gy0)];
   };
 
+  /** Höchstgröße des verwalteten Rasters (Felder) – begrenzt Rechenzeit und Spielstand */
+  S.GRID_MAX_TILES = 95000;
+
+  /**
+   * Verwaltetes Raster erweitern, damit erobertes Land bebaut werden kann.
+   * x0..x1, y0..y1: gewünschter Bereich in lokalen Feldern (darf außerhalb liegen).
+   * Wird größer als erlaubt, wächst das Raster nur anteilig in die gewünschte Richtung.
+   * Rückgabe: [dx, dy] – um so viel verschieben sich alle lokalen Koordinaten – oder null.
+   */
+  S.growGrid = function (G, x0, y0, x1, y1) {
+    const World = S.World, WT = World.WT;
+    const yMin = Math.floor(World.gyOf(80)) - G.gy0, yMax = Math.ceil(World.gyOf(-80)) - G.gy0;
+    let ex0 = Math.max(0, -Math.floor(x0)), ey0 = Math.max(0, Math.min(-Math.floor(y0), -yMin));
+    let ex1 = Math.max(0, Math.ceil(x1) + 1 - G.W), ey1 = Math.max(0, Math.min(Math.ceil(y1) + 1 - G.H, yMax - G.H));
+    const maxW = Math.floor(WT / 2);
+    const fits = (f) => {
+      const w = G.W + Math.ceil((ex0 + ex1) * f), h = G.H + Math.ceil((ey0 + ey1) * f);
+      return w <= maxW && w * h <= S.GRID_MAX_TILES;
+    };
+    let f = 1;
+    if (!fits(1)) {
+      let lo = 0, hi = 1;
+      for (let k = 0; k < 20; k++) { const m = (lo + hi) / 2; if (fits(m)) lo = m; else hi = m; }
+      f = lo;
+    }
+    if (f < 1) { ex0 = Math.floor(ex0 * f); ex1 = Math.floor(ex1 * f); ey0 = Math.floor(ey0 * f); ey1 = Math.floor(ey1 * f); }
+    if (!(ex0 || ex1 || ey0 || ey1)) return null;
+    const NW = G.W + ex0 + ex1, NH = G.H + ey0 + ey1, dx = ex0, dy = ey0;
+    const ngx0 = G.gx0 - ex0, ngy0 = G.gy0 - ey0;
+    const nt = World.tileBlock(ngx0, ngy0, NW, NH);
+    for (const k in S.TILE_TYPES) if (!nt[k]) nt[k] = new S.TILE_TYPES[k](NW * NH);
+    // Besetzte Felder im neuen Bereich übernehmen
+    const occ = G.mil ? G.mil.occ : null, home = World.homeIdx;
+    if (occ) for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+      const ox = i - dx, oy = j - dy;
+      if (ox >= 0 && oy >= 0 && ox < G.W && oy < G.H) continue;
+      const v = occ[World.wrapGx(ngx0 + i) + ',' + (ngy0 + j)];
+      if (v === undefined) continue;
+      const id = j * NW + i;
+      nt.owner[id] = v; nt.region[id] = v === 0 ? 0 : v === home ? 1 : 2;
+    }
+    // Bisheriges Raster unverändert hineinkopieren
+    for (const k in nt) {
+      const src = G.t[k], dst = nt[k];
+      if (!src) continue;
+      for (let j = 0; j < G.H; j++) dst.set(src.subarray(j * G.W, (j + 1) * G.W), (j + dy) * NW + dx);
+    }
+    G.t = nt; G.W = NW; G.H = NH; G.gx0 = ngx0; G.gy0 = ngy0;
+    for (const c of G.cities) { c.x += dx; c.y += dy; }
+    for (const b of G.blds) { b.x += dx; b.y += dy; }
+    if (G.cam) { G.cam.x += dx * S.TS; G.cam.y += dy * S.TS; }
+    G._netDirty = true; G._comp = null; G._neigh = null;
+    if (S.onGridGrown) S.onGridGrown(dx, dy);
+    return [dx, dy];
+  };
+
   S.isBuildableLand = function (G, id) {
     const t = G.t;
     return t.region[id] === 1 && t.elev[id] >= 0 && t.elev[id] < S.MOUNTAIN_E && !t.bld[id] && !t.road[id];

@@ -25,14 +25,14 @@ python3 tools/build_single.py            # schreibt dist/souveraen.html
 | Aktion | Geste |
 |---|---|
 | Globus drehen | mit einem Finger wischen (mit Schwung) |
-| Zoomen (Globus und Karte) | zwei Finger, doppelt tippen oder die Knöpfe + / − |
+| Zoomen (Globus und Karte) | zwei Finger (mit Schwung), doppelt tippen, doppelt tippen und ziehen (eine Hand), mit zwei Fingern kurz tippen zum Herauszoomen, oder die Knöpfe + / − |
 | Karte verschieben | ein Finger |
 | Welt erkunden | stufenlos herauszoomen bis zum Globus, mit einem Finger über die Landesgrenzen hinaus scrollen; „Zu meinem Land“ fliegt zurück |
 | Gebäude, Stadt gründen, Abriss | Werkzeug wählen, Bauplatz antippen, „Bauen“ bestätigen |
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
 | Truppen führen | Einheit antippen, „+ Truppen ringsum“ für eine Gruppe, „Marschziel“, Ziel antippen |
-| Land erobern | mit Infanterie über die Grenze marschieren (Umkreis ~15 km); eine Stadt fällt, wenn Infanterie ihren Mittelpunkt erreicht |
+| Land erobern | mit Infanterie über die Grenze marschieren (Umkreis ~15 km); eine Stadt fällt, wenn Infanterie ihren Mittelpunkt erreicht. Erobertes Land ist danach normal bebaubar, auch mit neuen Städten |
 
 Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten). Die Welt läuft weiter, wenn die App geschlossen ist; beim Öffnen wird bis zu ein Jahr nachgerechnet und ein Lagebericht gezeigt. Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.
 
@@ -41,6 +41,7 @@ Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten
 ```bash
 node tools/simtest.js DEU EGY JPN --months=120   # Simulation ohne Browser testen
 node tools/wartest.js DEU FRA 20                  # Krieg ohne Browser durchspielen (Tage)
+node tools/growtest.js DEU FRA 25                 # erobertes Land ins Raster übernehmen und dort eine Stadt gründen
 python3 tools/build_data.py ne_50m_admin_0_countries.geojson ne_50m_populated_places_simple.geojson > js/data/world.js
 ```
 

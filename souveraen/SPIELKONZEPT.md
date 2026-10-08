@@ -90,7 +90,10 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 
 ### Touch-Steuerung
 
-- Ein Finger verschiebt die Karte (mit Schwung), zwei Finger zoomen, doppelt tippen zoomt hinein, + / − als Knöpfe für die Einhandbedienung.
+- Ein Finger verschiebt die Karte (mit Schwung), zwei Finger zoomen (ebenfalls mit Schwung), doppelt tippen zoomt hinein, kurz mit zwei Fingern tippen zoomt heraus, + / − als Knöpfe für die Einhandbedienung.
+- **Einhand-Zoom:** doppelt tippen, beim zweiten Mal den Finger liegen lassen und nach unten oder oben ziehen.
+- Beim Zoomen bleibt das Bild flüssig: Kartenblöcke entstehen mit festem Zeitbudget pro Bild, bis dahin springt die nächstbeste vorhandene Auflösung ein; die genaue Auflösung folgt, sobald der Zoom ruht.
+- **Städte bleiben sichtbar:** Weit draußen markiert ein Punkt jede eigene Stadt (Hauptstadt gold, Neugründungen grün), kleine Städte bekommen ein schmales Namensschild. Überlappen sich Schilder, weicht eines nach oben aus; Vorrang haben Auswahl, Hauptstadt, Neugründungen und große Städte. Truppen in einer Stadt schieben das Schild unter sich.
 - Werkzeugleiste unten in Daumenreichweite; die Werkzeuge erscheinen als Kartenraster mit Kosten.
 - **Antippen und bestätigen:** Ein Tipp setzt eine Vorschau, die Aktionsleiste zeigt Kosten, Ertrag an genau diesem Ort und Warnungen (z. B. fehlende Straße). Gebaut wird erst mit „Bauen“.
 - Straßen und Bahnen: Start und Ziel antippen; nach dem Bau ist das Ziel der neue Start, so lassen sich Strecken Stück für Stück ziehen.
@@ -117,6 +120,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Bilder:** Jede Einheit zeigt ihr Bild (Soldat, Panzer, Geschütz) und blickt in Marschrichtung; darunter der Stärkebalken.
 - **Fronten:** Nur **Infanterie** gewinnt Gelände. Steht sie auf feindlichem Boden, wechselt alles im Umkreis von etwa 15 km den Besitzer (ausgewählte Infanterie zeigt den Kreis gestrichelt) – die Grenze wandert mit. Felder, die näher an einer feindlichen Einheit liegen, bleiben beim Gegner: Die Front liegt zwischen den Truppen. Stadtgebiete werden nicht über den Umkreis eingenommen.
 - **Städte** sind erobert, sobald Infanterie ihren Mittelpunkt erreicht – Panzer und Artillerie können sie freikämpfen, aber nicht besetzen. Fällt die eigene Hauptstadt, kapituliert die Regierung.
+- **Erobertes Land bebauen:** Erobertes Gebiet wird Teil des eigenen Staatsgebiets. Liegt es außerhalb des bisher verwalteten Kartenausschnitts, wächst dieser automatisch mit (bis etwa 95 000 Felder, damit Simulation und Spielstand handlich bleiben). Dort lässt sich alles bauen: Straßen, Betriebe, Zonen und neue Städte – mit mindestens 6 Feldern Abstand zu bestehenden und eroberten Städten; eroberte Städte bleiben, wie sie sind.
 
 ### Gegner
 - Jedes Land stellt eine Armee nach seiner echten Größe auf, mobilisiert anderthalb Tage, hält einen Teil zur Verteidigung zurück und greift mit dem Rest die nächsten Städte an. Nachschub kommt alle zwei Spieltage.

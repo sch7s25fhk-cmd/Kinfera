@@ -88,8 +88,32 @@
       G.t.owner[i] = o;
       G.t.region[i] = o === 0 ? 0 : o === M.home() ? 1 : 2;
       G._netDirty = true;
-    }
+    } else if (o === M.home()) G._growReq = true;
     if (S.onDirtyGlobal) S.onDirtyGlobal(Math.floor(gx), Math.floor(gy));
+  };
+
+  /**
+   * Erobertes Land außerhalb des verwalteten Rasters einbeziehen, damit dort gebaut werden kann.
+   * near: optional ein Feld (global), das unbedingt hinein soll. Gibt [dx, dy] zurück, wenn das Raster gewachsen ist.
+   */
+  M.ensureGrid = function (G, near) {
+    G._growReq = false;
+    const home = M.home();
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    const add = (gx, gy) => {
+      const [lx, ly] = local(G, gx, gy);
+      if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) return;
+      x0 = Math.min(x0, lx); y0 = Math.min(y0, ly); x1 = Math.max(x1, lx); y1 = Math.max(y1, ly);
+    };
+    if (near) add(near[0], near[1]);
+    for (const k in G.mil.occ) {
+      if (G.mil.occ[k] !== home) continue;
+      const p = k.indexOf(',');
+      add(+k.slice(0, p), +k.slice(p + 1));
+    }
+    if (x0 > x1) return null;
+    const pad = 6;
+    return S.growGrid(G, x0 - pad, y0 - pad, x1 + pad, y1 + pad);
   };
 
   const tmemo = new Map();

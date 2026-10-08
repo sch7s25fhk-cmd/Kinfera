@@ -159,11 +159,13 @@
     S.onDirty = (x0, y0, x1, y1) => S.R.markDirty(x0, y0, x1, y1);
     S.onLog = (text, kind) => { if (kind !== 'info') S.UI.toast(text, kind, 5200); };
     S.onDirtyGlobal = (gx, gy) => S.R.markDirtyGlobal(gx, gy);
+    S.onGridGrown = (dx, dy) => { if (S.R.G === G) { S.R.gridGrown(dx, dy); S.UI.gridGrown(dx, dy); } };
     S.World.setup(G.world);
     if (!G.mil) S.Mil.init(G);
     G.continuous = true;
     S.UI.RATE = RATE;
     const away = fresh ? null : catchUp(G);
+    if (!fresh) S.Mil.ensureGrid(G);
     requestAnimationFrame(() => {
       S.R.init(G, $('mapCanvas'));
       S.UI.initGame(G);
@@ -235,9 +237,19 @@
         if (G.pendingEvent) S.UI.showEvent(G.pendingEvent);
       }
       acc += dt;
-      if (acc > 1500) { acc = 0; S.UI.refresh(false); }
+      if (acc > 1500) {
+        acc = 0;
+        // erobertes Land bebaubar machen, sobald gerade niemand die Karte bewegt
+        if (G._growReq && !G.pendingEvent && !S.UI.modalOpen && !S.UI.busy()) {
+          if (S.Mil.ensureGrid(G) && !G.flags.grewHint) { G.flags.grewHint = true; S.UI.toast('Erobertes Land gehört jetzt zu deinem Staatsgebiet: Du kannst dort bauen und Städte gründen.', 'good', 5200); }
+        }
+        S.UI.refresh(false);
+      }
       saveAcc += dt;
-      if (saveAcc > 20000) { saveAcc = 0; S.save(G); }
+      if (saveAcc > 20000) {
+        saveAcc = 0;
+        if (!S.save(G) && !G._saveWarned) { G._saveWarned = true; S.UI.toast('Spielstand konnte nicht gespeichert werden (Speicher voll).', 'bad', 6000); }
+      }
       S.UI.frame(dt);
       S.R.draw(now);
     }

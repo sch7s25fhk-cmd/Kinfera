@@ -24,6 +24,7 @@
     R.noiseB = S.makeNoise(G.meta.seed + 502);
     R.dirty = null;
     R.dirtyG = [];
+    R.lastZ = 0; R.zoomingUntil = 0;
     R.chunks = new Map();     // Detailblöcke (gezeichnet)
     R.ochunks = new Map();    // Übersichtsblöcke
     R.bases = new Map();      // reine Weltdaten je Block (unveränderlich)
@@ -51,10 +52,21 @@
     if (R.globe) R.globe.resize();
   };
 
+  /** Geänderte Felder sammeln (einzelne Rechtecke, damit Wachstum hier nicht das ganze Land neu zeichnen lässt) */
   R.markDirty = function (x0, y0, x1, y1) {
-    const d = R.dirty;
-    if (!d) R.dirty = [x0, y0, x1, y1];
-    else { d[0] = Math.min(d[0], x0); d[1] = Math.min(d[1], y0); d[2] = Math.max(d[2], x1); d[3] = Math.max(d[3], y1); }
+    const d = R.dirty || (R.dirty = []);
+    for (const r of d) {
+      // überlappende oder benachbarte Rechtecke zusammenfassen
+      if (x0 <= r[2] + 4 && x1 >= r[0] - 4 && y0 <= r[3] + 4 && y1 >= r[1] - 4) {
+        r[0] = Math.min(r[0], x0); r[1] = Math.min(r[1], y0); r[2] = Math.max(r[2], x1); r[3] = Math.max(r[3], y1);
+        R.viewKey = null;
+        return;
+      }
+    }
+    if (d.length >= 48) {
+      const r = d[d.length - 1];
+      r[0] = Math.min(r[0], x0); r[1] = Math.min(r[1], y0); r[2] = Math.max(r[2], x1); r[3] = Math.max(r[3], y1);
+    } else d.push([x0, y0, x1, y1]);
     R.viewKey = null;
   };
   /** Geänderter Besitz irgendwo auf der Welt (Eroberung) */
@@ -85,18 +97,33 @@
     flushGlobal();
     if (!R.dirty) return;
     const G = R.G, WT = World.WT;
-    let [x0, y0, x1, y1] = R.dirty;
+    const rects = R.dirty.map(([x0, y0, x1, y1]) => [x0 + G.gx0 - 2, y0 + G.gy0 - 4, x1 + G.gx0 + 2, y1 + G.gy0 + 2]);
     R.dirty = null;
-    const gx0 = x0 + G.gx0 - 2, gx1 = x1 + G.gx0 + 2, gy0 = y0 + G.gy0 - 4, gy1 = y1 + G.gy0 + 2;
     const hit = (e, size) => {
-      for (const k of [-WT, 0, WT]) {
+      for (const [gx0, gy0, gx1, gy1] of rects) for (const k of [-WT, 0, WT]) {
         const ex0 = e.cx * size + k, ey0 = e.cy * size;
         if (ex0 <= gx1 + BP && ex0 + size >= gx0 - BP && ey0 <= gy1 + BP && ey0 + size >= gy0 - BP) return true;
       }
       return false;
     };
-    for (const e of R.chunks.values()) if (hit(e, CH)) e.stale = true;
-    for (const e of R.ochunks.values()) if (hit(e, OCH)) e.stale = true;
+    for (const e of R.chunks.values()) if (!e.stale && hit(e, CH)) e.stale = true;
+    for (const e of R.ochunks.values()) if (!e.stale && hit(e, OCH)) e.stale = true;
+  };
+
+  /** Das eigene Raster ist gewachsen (erobertes Land): Kamera mitschieben, alles neu zeichnen */
+  R.gridGrown = function (dx, dy) {
+    const G = R.G;
+    if (!G) return;
+    R.cam.x += dx * TS; R.cam.y += dy * TS;
+    const a = R.zoomAnim;
+    if (a) for (const k of ['wx', 'x0', 'x1']) if (a[k] !== undefined) a[k] += dx * TS;
+    if (a) for (const k of ['wy', 'y0', 'y1']) if (a[k] !== undefined) a[k] += dy * TS;
+    if (R.sel) { R.sel[0] += dx; R.sel[1] += dy; }
+    R.hover = null;
+    R.viewCv.width = G.W; R.viewCv.height = G.H;
+    R.viewKey = null;
+    for (const e of R.chunks.values()) e.stale = true;
+    for (const e of R.ochunks.values()) e.stale = true;
   };
 
   // ---------------- Kamera-Umrechnungen ----------------
@@ -1189,6 +1216,11 @@
     if (!G) return;
     R.frame++;
     R.flush();
+    // Zeitbudget für neue Kartenblöcke: das Bild bleibt flüssig, fehlende Blöcke kommen über mehrere Bilder
+    const tNow = performance.now();
+    R.frameT0 = tNow; R.renderedNow = 0;
+    if (Math.abs(cam.z - R.lastZ) > cam.z * 1e-4) { R.zoomingUntil = tNow + 220; R.lastZ = cam.z; }
+    const zooming = R.zoomingUntil > tNow;
     const z = cam.z, dpr = R.dpr, WT = World.WT, span = WT * TS;
     const gr = R.globeR(), m = md();
     const flatA = S.clamp((gr / m - R.GLOBE_FULL) / (R.GLOBE_FLAT - R.GLOBE_FULL), 0, 1);
@@ -1215,12 +1247,15 @@
     // globale Feldbereiche
     const gA = vx0 / TS + G.gx0, gB = vx1 / TS + G.gx0, hA = Math.max(0, vy0 / TS + G.gy0), hB = Math.min(WT - 1, vy1 / TS + G.gy0);
     const centerG = [R.camGX(), R.camGY()];
-    const drawChunks = (map, size, alpha, budget, keyOf, make, res, srcPx) => {
+    const canRender = () => R.renderedNow === 0 || performance.now() - R.frameT0 < 9;
+    const drawChunks = (map, size, alpha, keyOf, make, res, srcPx) => {
       const list = [];
       for (let cy = Math.floor(hA / size); cy <= Math.floor(hB / size); cy++) for (let cx = Math.floor(gA / size); cx <= Math.floor(gB / size); cx++) {
         list.push([cx, cy, Math.hypot(cx * size + size / 2 - centerG[0], cy * size + size / 2 - centerG[1])]);
       }
       list.sort((a, b) => a[2] - b[2]);
+      // Ersatzauflösungen: nächstgelegene zuerst, bei Gleichstand die schärfere
+      const alt = [1, 2, 3, 4].filter(r => r !== res).sort((a, b) => Math.abs(a - res) - Math.abs(b - res) || b - a);
       let missing = 0;
       c.globalAlpha = flatA * alpha;
       // bilinear statt „high“: Blöcke liegen schon fast in Bildschirmauflösung vor
@@ -1228,11 +1263,16 @@
       for (const [cx, cy] of list) {
         const wcx = wrapC(cx, WT / size);
         const key = keyOf(wcx, cy, res);
-        let e = getChunk(map, key, null, false);
-        if (!e && budget > 0) { e = getChunk(map, key, (reuse) => make(wcx, cy, res, reuse), true); budget--; }
-        if (!e) {
-          missing++;
-          for (const r2 of [res, 2, 1, 4, 3]) { const f = map.get(keyOf(wcx, cy, r2)); if (f) { e = f; f.used = R.frame; break; } }
+        let e = map.get(key);
+        if (e && !e.stale) e.used = R.frame;
+        else {
+          // vorhandenen (auch veralteten) Block als Ersatz suchen
+          let fb = e || null;
+          if (!fb && res) for (const r2 of alt) { const f = map.get(keyOf(wcx, cy, r2)); if (f) { fb = f; break; } }
+          // während des Zoomens nur Lücken füllen, die genaue Auflösung folgt, sobald der Zoom ruht
+          if ((!fb || !zooming) && canRender()) { e = getChunk(map, key, (reuse) => make(wcx, cy, res, reuse), true); R.renderedNow++; }
+          else { e = fb; missing++; R.stats.missing = (R.stats.missing || 0) + 1; }
+          if (e) e.used = R.frame;
         }
         if (!e) continue;
         const wx = (cx * size - G.gx0) * TS, wy = (cy * size - G.gy0) * TS, ws = size * TS;
@@ -1247,14 +1287,14 @@
     // 4) Übersicht: Gelände, Städte, Straßen je Feld
     if (ppt >= 3.2) {
       const oA = S.clamp((ppt - 3.2) / 2, 0, 1);
-      drawChunks(R.ochunks, OCH, oA, 2, (x, y) => x + ',' + y, (x, y) => renderOverview(x, y), 0, () => OCH * OVR);
+      drawChunks(R.ochunks, OCH, oA, (x, y) => x + ',' + y, (x, y) => renderOverview(x, y), 0, () => OCH * OVR);
     }
     // 5) Details: Häuser, Bäume, Straßen
     const need = z * dpr;
     if (need >= 0.62) {
       const res = need <= 1.2 ? 1 : need <= 2.4 ? 2 : need <= 3.4 ? 3 : 4;
       const dA = S.clamp((need - 0.62) / 0.22, 0, 1);
-      drawChunks(R.chunks, CH, dA, 3, (x, y, r) => x + ',' + y + ',' + r, (x, y, r, reuse) => renderChunk(x, y, r, reuse), res, (e) => (e.w - CM * 2));
+      drawChunks(R.chunks, CH, dA, (x, y, r) => x + ',' + y + ',' + r, (x, y, r, reuse) => renderChunk(x, y, r, reuse), res, (e) => (e.w - CM * 2));
     }
     c.imageSmoothingQuality = 'high';
     c.globalAlpha = flatA;
@@ -1302,7 +1342,7 @@
       }
     }
     if (ppt < 7) drawCountryNames(c, G, ppt);
-    if (ppt >= 2.2) { drawForeignLabels(c, G, ppt, gA, gB, hA, hB); drawLabels(c, G); }
+    if (ppt >= 2.2) { const placed = []; drawLabels(c, G, placed); drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed); }
     if (G.mil && ppt >= 0.5) { c.globalAlpha = R.flatA; c.textBaseline = 'alphabetic'; drawUnits(c, G, time); }
     c.globalAlpha = 1;
   };
@@ -1557,7 +1597,9 @@
     c.globalAlpha = a;
   }
 
-  function drawForeignLabels(c, G, ppt, gA, gB, hA, hB) {
+  const overlaps = (placed, x0, y0, x1, y1) => placed.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]);
+
+  function drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed) {
     const near = World.citiesNear(Math.floor(gA), Math.floor(hA), Math.ceil(gB - gA) + 1, Math.ceil(hB - hA) + 1);
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const { c: city, gx, gy } of near) {
@@ -1569,6 +1611,8 @@
       c.font = '600 11px "Big Shoulders Display", "Public Sans", system-ui, sans-serif';
       const name = city.name.toUpperCase();
       const w = c.measureText(name).width + 12;
+      if (overlaps(placed, sx - w / 2, sy - 1, sx + w / 2, sy + 16)) continue;
+      placed.push([sx - w / 2, sy - 1, sx + w / 2, sy + 16]);
       c.fillStyle = 'rgba(245,240,228,0.85)';
       roundRect(c, sx - w / 2, sy - 1, w, 17, 5); c.fill();
       if (city.capital) { c.fillStyle = '#8a3b2c'; c.beginPath(); c.arc(sx - w / 2 + 5, sy + 7.5, 2.2, 0, Math.PI * 2); c.fill(); }
@@ -1599,36 +1643,91 @@
     }
   }
 
-  function drawLabels(c, G) {
-    const z = R.cam.z;
+  /**
+   * Namen der eigenen Städte. Keine Stadt verschwindet beim Herauszoomen: weit draußen zeigt ein Punkt die Lage,
+   * kleine Städte bekommen ein schmales Schild. Überlappen sich Schilder, gewinnen Auswahl, Hauptstadt,
+   * selbst gegründete Städte und dann die größeren.
+   */
+  function drawLabels(c, G, placed) {
+    const z = R.cam.z, ppt = R.ppt, sc = S.cityScale(G);
+    const font = '"Big Shoulders Display", "Public Sans", system-ui, sans-serif';
+    const prio = (city) => (R.selCity === city.id ? 1e12 : 0) + (city.capital ? 1e11 : 0) + (city.isNew ? 1e10 : 0) + city.pop;
+    const list = G.cities.slice().sort((a, b) => prio(b) - prio(a));
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    for (const city of G.cities) {
-      const [sx, sy] = R.worldToScreen((city.x + 0.5) * TS, (city.y + 1.2) * TS);
-      if (sx < -80 || sy < -40 || sx > R.cw + 80 || sy > R.ch + 40) continue;
-      const big = city.capital || city.pop * S.cityScale(G) > 1e6;
-      if (z < 0.35 && !big) continue;
-      const name = city.name;
-      const pop = S.fmtPop(city.pop * S.cityScale(G));
-      c.font = (big ? '700 13px ' : '600 12px ') + '"Big Shoulders Display", "Public Sans", system-ui, sans-serif';
-      const w1 = c.measureText(name.toUpperCase()).width;
-      c.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
-      const w2 = c.measureText(pop).width;
-      const w = Math.max(w1, w2) + 16;
+    const pos = new Map();
+    // Spielsteine in der Stadt: Schild darunter setzen, damit beides lesbar bleibt
+    const tokens = [];
+    if (G.mil && ppt >= 0.5) for (const u of G.mil.units) {
+      const [x, y] = R.gToScreen(u.x, u.y);
+      if (x > -60 && y > -60 && x < R.cw + 60 && y < R.ch + 60) tokens.push(x, y);
+    }
+    const below = (cx, cy, y0) => {
+      let y = y0;
+      for (let i = 0; i < tokens.length; i += 2) if (Math.abs(tokens[i] - cx) < 34 && tokens[i + 1] + 21 > y && tokens[i + 1] - 16 < y + 30) y = tokens[i + 1] + 21;
+      return y;
+    };
+    for (const city of list) {
+      const [cx, cy] = R.worldToScreen((city.x + 0.5) * TS, (city.y + 0.5) * TS);
+      if (cx < -90 || cy < -50 || cx > R.cw + 90 || cy > R.ch + 50) continue;
+      pos.set(city.id, [cx, cy]);
+    }
+    // Lagepunkte, solange die Häuser selbst noch zu klein sind
+    if (ppt < 14) {
+      const r = ppt < 5 ? 3.2 : 4;
+      for (const city of list) {
+        const p = pos.get(city.id);
+        if (!p) continue;
+        c.fillStyle = 'rgba(18,28,38,0.85)';
+        c.beginPath(); c.arc(p[0], p[1], r + 1.6, 0, Math.PI * 2); c.fill();
+        c.fillStyle = city.capital ? '#e8b23a' : city.isNew ? '#9fe0b0' : '#f3ecdd';
+        c.beginPath(); c.arc(p[0], p[1], r, 0, Math.PI * 2); c.fill();
+      }
+    }
+    for (const city of list) {
+      const p = pos.get(city.id);
+      if (!p) continue;
+      const big = city.capital || city.pop * sc > 1e6;
       const sel = R.selCity === city.id;
+      const compact = z < 0.35 && !big && !sel;
+      const name = city.name.toUpperCase();
+      const sx = p[0];
+      let sy = below(sx, p[1], ppt < 14 ? p[1] + 7 : R.worldToScreen(0, (city.y + 1.2) * TS)[1]);
+      let w, h;
+      const pop = S.fmtPop(city.pop * sc);
+      if (compact) {
+        c.font = '600 11px ' + font;
+        w = c.measureText(name).width + 12; h = 17;
+      } else {
+        c.font = (big ? '700 13px ' : '600 12px ') + font;
+        const w1 = c.measureText(name).width;
+        c.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
+        w = Math.max(w1, c.measureText(pop).width) + 16; h = 30;
+      }
+      let box = [sx - w / 2, sy - 2, sx + w / 2, sy - 2 + h];
+      if (!sel && overlaps(placed, box[0], box[1], box[2], box[3])) {
+        // kein Platz unter der Stadt: darüber versuchen
+        const up = p[1] - 9 - h;
+        if (overlaps(placed, box[0], up - 2, box[2], up - 2 + h)) continue;
+        sy = up; box = [sx - w / 2, sy - 2, sx + w / 2, sy - 2 + h];
+      }
+      placed.push(box);
       c.fillStyle = sel ? 'rgba(232,178,58,0.95)' : 'rgba(18,28,38,0.78)';
-      roundRect(c, sx - w / 2, sy - 2, w, 30, 6);
+      roundRect(c, box[0], box[1], w, h, compact ? 5 : 6);
       c.fill();
-      if (city.capital) {
-        c.fillStyle = sel ? '#1a2633' : '#e8b23a';
-        c.beginPath(); c.arc(sx - w / 2 + 7, sy + 7, 2.6, 0, Math.PI * 2); c.fill();
+      const dotY = sy + 7;
+      if (city.capital || city.isNew) {
+        c.fillStyle = sel ? '#1a2633' : city.capital ? '#e8b23a' : '#9fe0b0';
+        c.beginPath(); c.arc(box[0] + 7, dotY, compact ? 2.2 : 2.6, 0, Math.PI * 2); c.fill();
       }
       c.fillStyle = sel ? '#1a2633' : '#f3ecdd';
-      c.font = (big ? '700 13px ' : '600 12px ') + '"Big Shoulders Display", "Public Sans", system-ui, sans-serif';
-      c.fillText(name.toUpperCase(), sx, sy + 7);
-      c.fillStyle = sel ? '#1a2633' : '#b9c4cf';
-      c.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
-      c.fillText(pop, sx, sy + 20);
+      c.font = compact ? '600 11px ' + font : (big ? '700 13px ' : '600 12px ') + font;
+      c.fillText(name, sx + (compact && (city.capital || city.isNew) ? 2 : 0), dotY);
+      if (!compact) {
+        c.fillStyle = sel ? '#1a2633' : '#b9c4cf';
+        c.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
+        c.fillText(pop, sx, sy + 20);
+      }
     }
   }
 

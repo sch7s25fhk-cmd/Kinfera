@@ -434,6 +434,14 @@
     if (t.elev[id] < 0 || t.elev[id] >= S.MOUNTAIN_E) return { ok: false, reason: 'Ungeeignetes Gelände' };
     if (t.bld[id] || t.road[id] || t.river[id]) return { ok: false, reason: 'Bauplatz belegt' };
     for (const c of G.cities) if (Math.hypot(c.x - x, c.y - y) < 6) return { ok: false, reason: 'Zu nah an ' + c.name };
+    // eroberte fremde Städte bleiben, wie sie sind
+    const W = S.World, gx = x + G.gx0 + 0.5, gy = y + G.gy0 + 0.5;
+    if (W && W.citiesNear) {
+      for (const n of W.citiesNear(Math.floor(gx) - 8, Math.floor(gy) - 8, 17, 17)) {
+        if (n.c.cid === G.meta.id) continue;
+        if (Math.hypot(n.gx - gx, n.gy - gy) < 6) return { ok: false, reason: 'Zu nah an ' + n.c.name };
+      }
+    }
     if (G.eco.money < S.TOOLS.city.cost) return { ok: false, reason: 'Nicht genug Geld (500 Mio. T)' };
     return { ok: true };
   };

@@ -581,9 +581,10 @@
   function bindMap() {
     const cv = $('mapCanvas');
     const ptrs = new Map();
-    let mode = null; // pan | pinch | paint | tap
+    let mode = null; // pan | pinch | paint | tap | dzoom (doppelt tippen und ziehen) | done
     let st = null, lastTap = null;
     const tileAt = (x, y) => R.screenToTile(x, y);
+    UI.busy = () => ptrs.size > 0 || !!R.zoomAnim || !!R.zoomFling;
 
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
@@ -593,17 +594,25 @@
       closeFlyout();
       R.vel = null;
       R.zoomAnim = null;
+      R.zoomFling = null;
       if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         mode = 'pinch';
-        st = { d: Math.hypot(a.x - b.x, a.y - b.y), z: R.cam.z, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+        st = { d, z: R.cam.z, mx, my, t0: performance.now(), d0: d, mx0: mx, my0: my, lt: performance.now(), v: 0 };
         return;
       }
       if (ptrs.size > 2) return;
       const tool = S.TOOLS[UI.tool];
       const [tx, ty] = tileAt(e.offsetX, e.offsetY);
-      st = { x: e.offsetX, y: e.offsetY, lx: e.offsetX, ly: e.offsetY, lt: performance.now(), vx: 0, vy: 0, tx, ty, moved: false };
+      const now = performance.now();
+      st = { x: e.offsetX, y: e.offsetY, lx: e.offsetX, ly: e.offsetY, lt: now, vx: 0, vy: 0, tx, ty, moved: false };
       if (e.button === 1 || e.button === 2) { mode = 'pan'; return; }
+      // zweimal tippen: Finger liegen lassen und ziehen zoomt, loslassen zoomt hinein
+      if (tool.kind === 'inspect' && lastTap && now - lastTap.t < 320 && Math.hypot(e.offsetX - lastTap.x, e.offsetY - lastTap.y) < 40) {
+        mode = 'dzoom'; st.z0 = R.cam.z; lastTap = null;
+        return;
+      }
       if (PAINT(tool)) { mode = 'paint'; paintDone.clear(); paintAt(tx, ty); }
       else mode = 'tap';
     });
@@ -618,12 +627,29 @@
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         // Weltpunkt unter der alten Fingermitte festhalten, dann neue Mitte folgen lassen
         const [wx, wy] = R.screenToWorld(st.mx, st.my);
+        const z0 = R.cam.z;
         R.cam.z = S.clamp(st.z * d / st.d, R.minZoom(), R.MAX_Z);
         R.clampCam();
         R.cam.x = wx - (mx - R.cw / 2) / R.cam.z;
         R.cam.y = wy - (my - R.ch / 2) / R.cam.z;
+        // Zoomgeschwindigkeit für den Schwung nach dem Loslassen
+        const now = performance.now(), dt = Math.max(8, now - st.lt);
+        st.v = st.v * 0.6 + (Math.log(R.cam.z / z0) / dt) * 0.4; st.lt = now;
         st.mx = mx; st.my = my; st.z = R.cam.z; st.d = d;
         R.clampCam();
+        return;
+      }
+      if (mode === 'dzoom') {
+        const dy = e.offsetY - st.y;
+        if (!st.moved && Math.abs(dy) > 6) st.moved = true;
+        if (st.moved) {
+          const [wx, wy] = R.screenToWorld(st.x, st.y);
+          R.cam.z = S.clamp(st.z0 * Math.exp(dy * 0.012), R.minZoom(), R.MAX_Z);
+          R.clampCam();
+          R.cam.x = wx - (st.x - R.cw / 2) / R.cam.z;
+          R.cam.y = wy - (st.y - R.ch / 2) / R.cam.z;
+          R.clampCam();
+        }
         return;
       }
       if (mode === 'paint') { const [tx, ty] = tileAt(e.offsetX, e.offsetY); paintAt(tx, ty); return; }
@@ -644,27 +670,36 @@
       if (!ptrs.has(e.pointerId)) return;
       ptrs.delete(e.pointerId);
       if (mode === 'pinch') {
+        const now = performance.now();
+        // kurz mit zwei Fingern getippt: herauszoomen
+        if (now - st.t0 < 260 && Math.abs(st.d - st.d0) < 14 && Math.hypot(st.mx - st.mx0, st.my - st.my0) < 14) {
+          zoomAt(st.mx0, st.my0, 1 / 2);
+          mode = ptrs.size ? 'done' : null;
+          return;
+        }
+        // Schwung: der Zoom läuft kurz weiter
+        if (now - st.lt < 150 && Math.abs(st.v) > 0.0006) R.zoomFling = { v: S.clamp(st.v * 0.6, -0.004, 0.004), sx: st.mx, sy: st.my };
         if (ptrs.size === 1) {
           const [q] = [...ptrs.values()];
           mode = 'pan';
-          st = { x: q.x, y: q.y, lx: q.x, ly: q.y, lt: performance.now(), vx: 0, vy: 0, moved: true };
+          st = { x: q.x, y: q.y, lx: q.x, ly: q.y, lt: now, vx: 0, vy: 0, moved: true };
         } else if (ptrs.size === 0) mode = null;
         return;
       }
       if (ptrs.size) return;
+      if (mode === 'dzoom') {
+        if (!st.moved) zoomAt(st.x, st.y, 2);
+        mode = null;
+        return;
+      }
+      if (mode === 'done') { mode = null; return; }
       if (mode === 'pan' && st.moved && performance.now() - st.lt < 90) {
         R.vel = { x: -st.vx / R.cam.z, y: -st.vy / R.cam.z };
       }
       if (mode === 'tap' && !st.moved) {
         const [tx, ty] = tileAt(e.offsetX, e.offsetY);
-        const now = performance.now();
-        if (UI.tool === 'inspect' && lastTap && now - lastTap.t < 320 && Math.hypot(e.offsetX - lastTap.x, e.offsetY - lastTap.y) < 30) {
-          zoomAt(e.offsetX, e.offsetY, 2);
-          lastTap = null;
-        } else {
-          lastTap = { t: now, x: e.offsetX, y: e.offsetY };
-          tapAt(tx, ty, e.offsetX, e.offsetY);
-        }
+        lastTap = { t: performance.now(), x: e.offsetX, y: e.offsetY };
+        tapAt(tx, ty, e.offsetX, e.offsetY);
       } else if (mode === 'paint') UI.refresh();
       mode = null;
     };
@@ -704,7 +739,7 @@
     const o = G.mil ? S.Mil.owner(G, World.gxOf(ll[0]), World.gyOf(ll[1])) : World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1]));
     if (!o) { UI.toast('Offenes Meer · ' + S.fmt1(Math.abs(ll[1])) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + ', ' + S.fmt1(Math.abs(ll[0])) + '° ' + (ll[0] >= 0 ? 'O' : 'W'), 'info', 1800); return; }
     const c = S.WORLD[o - 1];
-    if (o === World.homeIdx) { if (R.ppt < 3) flyHome(); else UI.toast('Dein Staatsgebiet (außerhalb des verwalteten Kernlands)', 'info', 2200); return; }
+    if (o === World.homeIdx) { if (R.ppt < 3) flyHome(); else UI.toast('Dein Staatsgebiet – wähle ein Werkzeug, um hier zu bauen.', 'info', 2200); return; }
     const near = World.citiesNear(Math.floor(World.gxOf(ll[0])) - 6, Math.floor(World.gyOf(ll[1])) - 6, 12, 12).filter(n => n.c.cid === c.id);
     const city = near.length ? near.sort((a, b) => Math.hypot(a.gx - World.gxOf(ll[0]), a.gy - World.gyOf(ll[1])) - Math.hypot(b.gx - World.gxOf(ll[0]), b.gy - World.gyOf(ll[1])))[0].c : null;
     const war = G.mil && G.mil.wars[o] ? ' · im Krieg mit dir' : '';
@@ -749,6 +784,15 @@
       }
       R.clampCam();
       if (a.t >= 1) R.zoomAnim = null;
+    } else if (R.zoomFling) {
+      const f = R.zoomFling;
+      const [wx, wy] = R.screenToWorld(f.sx, f.sy);
+      R.cam.z = S.clamp(R.cam.z * Math.exp(f.v * dt), R.minZoom(), R.MAX_Z);
+      R.cam.x = wx - (f.sx - R.cw / 2) / R.cam.z;
+      R.cam.y = wy - (f.sy - R.ch / 2) / R.cam.z;
+      R.clampCam();
+      f.v *= Math.pow(0.86, dt / 16);
+      if (Math.abs(f.v) < 0.00005 || R.cam.z <= R.minZoom() || R.cam.z >= R.MAX_Z) R.zoomFling = null;
     } else if (R.vel) {
       R.cam.x += R.vel.x * dt; R.cam.y += R.vel.y * dt;
       const f = Math.pow(0.92, dt / 16);
@@ -800,6 +844,10 @@
   function err(msg) { const n = performance.now(); if (n - lastErr > 1500) { UI.toast(msg, 'warn'); lastErr = n; } }
   function paintAt(tx, ty) {
     const G = UI.G, tool = S.TOOLS[UI.tool];
+    if (!S.inb(G, tx, ty) && G.mil && S.Mil.owner(G, tx + G.gx0 + 0.5, ty + G.gy0 + 0.5) === S.World.homeIdx) {
+      const d = S.Mil.ensureGrid(G, [tx + G.gx0 + 0.5, ty + G.gy0 + 0.5]);
+      if (d) { tx += d[0]; ty += d[1]; }
+    }
     const key = tx + ',' + ty;
     if (!S.inb(G, tx, ty) || paintDone.has(key)) return;
     paintDone.add(key);
@@ -942,6 +990,15 @@
       if (u) { UI.selectUnits([u.id]); vibrate(6); return; }
       if (UI.selUnits.length) UI.selectUnits([]);
     }
+    if (R.flatA >= 1 && !S.inb(G, tx, ty) && tool.kind !== 'inspect') {
+      // erobertes Land außerhalb des Rasters: Raster erweitern und weitermachen
+      const gx = tx + G.gx0, gy = ty + G.gy0;
+      if (G.mil && S.Mil.owner(G, gx + 0.5, gy + 0.5) === S.World.homeIdx) {
+        const d = S.Mil.ensureGrid(G, [gx + 0.5, gy + 0.5]);
+        if (d) { tx += d[0]; ty += d[1]; }
+        if (!S.inb(G, tx, ty)) { UI.toast('Zu weit vom Kernland entfernt – so viel Land kannst du nicht auf einmal verwalten.', 'warn', 2600); return; }
+      }
+    }
     if (R.flatA < 1 || !S.inb(G, tx, ty)) {
       if (tool.kind === 'inspect') tapWorld(sx, sy);
       else UI.toast('Dort kannst du nicht bauen: außerhalb deines Staatsgebiets.', 'warn', 2000);
@@ -965,6 +1022,19 @@
     vibrate(6);
     syncPreview();
   }
+
+  /** Das Raster ist gewachsen: gemerkte Feldkoordinaten mitschieben */
+  UI.gridGrown = function (dx, dy) {
+    const sh = (p) => { if (p) { p[0] += dx; p[1] += dy; } };
+    const p = UI.pending;
+    if (p) {
+      sh(p.start); sh(p.end); sh(p.at);
+      if (p.path) for (const t of p.path.tiles) { t.x += dx; t.y += dy; }
+    }
+    if (UI.sel && UI.sel.x !== undefined) { UI.sel.x += dx; UI.sel.y += dy; }
+    paintDone.clear();
+    syncPreview();
+  };
 
   /** Vorschau auf der Karte und Aktionsleiste aus UI.pending ableiten */
   function syncPreview() {
@@ -1210,9 +1280,9 @@
       '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zu einer Stadt führt. Städte ohne Verbindung zur Hauptstadt sind unzufrieden.</p>' +
       '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
-      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
+      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
-      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
+      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Erobertes Land gehört dir ganz: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });

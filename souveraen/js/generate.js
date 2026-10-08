@@ -287,9 +287,14 @@
     if (occ) for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
       const ox = i - dx, oy = j - dy;
       if (ox >= 0 && oy >= 0 && ox < G.W && oy < G.H) continue;
-      const v = occ[World.wrapGx(ngx0 + i) + ',' + (ngy0 + j)];
-      if (v === undefined) continue;
       const id = j * NW + i;
+      let v = occ[World.wrapGx(ngx0 + i) + ',' + (ngy0 + j)];
+      if (v === undefined) {
+        // annektierte Länder gehören dir
+        const m = S.Mil ? S.Mil.mapAnnex(G, nt.owner[id]) : nt.owner[id];
+        if (m === nt.owner[id]) continue;
+        v = m;
+      }
       nt.owner[id] = v; nt.region[id] = v === 0 ? 0 : v === home ? 1 : 2;
     }
     // Bisheriges Raster unverändert hineinkopieren

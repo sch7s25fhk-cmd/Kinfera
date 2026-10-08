@@ -12,6 +12,20 @@
     T.patches.clear(); T.dirty.clear(); T.bases.clear();
     if (!G || !G.mil) return;
     for (const k in G.mil.occ) { const p = k.indexOf(','); T.touch(+k.slice(0, p), +k.slice(p + 1)); }
+    // annektierte Länder: alle Blöcke über ihrem Gebiet
+    const nx = Math.ceil(World.WT / P);
+    for (const e in (G.mil.annexed || {})) {
+      const c = S.WORLD[e - 1];
+      if (!c) continue;
+      let lon0 = 180, lon1 = -180, lat0 = 90, lat1 = -90;
+      for (const r of c.r) for (let k = 0; k < r.length; k += 2) {
+        const lo = r[k] / 100, la = r[k + 1] / 100;
+        if (lo < lon0) lon0 = lo; if (lo > lon1) lon1 = lo; if (la < lat0) lat0 = la; if (la > lat1) lat1 = la;
+      }
+      const cx0 = Math.floor((World.gxOf(lon0) - M) / P), cx1 = Math.floor((World.gxOf(lon1) + M) / P);
+      const cy0 = Math.floor((World.gyOf(lat1) - M) / P), cy1 = Math.floor((World.gyOf(lat0) + M) / P);
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) T.dirty.add(((cx % nx) + nx) % nx + ',' + cy);
+    }
     T.last = 0;
   };
 
@@ -73,6 +87,7 @@
     const w = pw + 2 * M, h = ph + 2 * M, gx0 = cx * P - M, gy0 = cy * P - M;
     const base = baseOf(cx, cy, w, h);
     const cur = base.slice();
+    if (G.mil.annexed) for (let i = 0; i < cur.length; i++) if (G.mil.annexed[cur[i]] !== undefined) cur[i] = World.homeIdx;
     for (let i = 0; i < occ.length; i += 3) {
       let lx = occ[i] - gx0;
       if (lx < -WT / 2) lx += WT; else if (lx > WT / 2) lx -= WT;

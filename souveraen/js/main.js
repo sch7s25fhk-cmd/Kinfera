@@ -160,6 +160,7 @@
     S.onLog = (text, kind) => { if (kind !== 'info') S.UI.toast(text, kind, 5200); };
     S.onDirtyGlobal = (gx, gy) => S.R.markDirtyGlobal(gx, gy);
     S.onGridGrown = (dx, dy) => { if (S.R.G === G) { S.R.gridGrown(dx, dy); S.UI.gridGrown(dx, dy); } };
+    S.onAnnex = () => { if (S.R.G === G) S.R.annexed(); };
     S.World.setup(G.world);
     if (!G.mil) S.Mil.init(G);
     G.continuous = true;

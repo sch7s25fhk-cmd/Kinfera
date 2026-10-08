@@ -345,7 +345,9 @@
         '<span>Einheiten</span><span>' + st.count + '</span>' +
         '<span>Soldaten</span><span>' + S.fmtPop(st.men) + '</span>' +
         '<span>Unterhalt</span><span>' + S.fmtMoney(M.upkeep(G)) + '/Mon.</span>' +
-        '<span>Kriegsmüdigkeit</span><span>' + (M.weariness(G) ? '−' + Math.round(M.weariness(G)) + ' Zufriedenheit' : 'keine') + '</span></div></section>';
+        '<span>Kriegsmüdigkeit</span><span>' + (M.weariness(G) ? '−' + Math.round(M.weariness(G)) + ' Zufriedenheit' : 'keine') + '</span></div>' +
+        '<div class="chips"><button class="chip" data-retreat aria-pressed="' + (mil.autoRetreat !== false) + '">Automatischer Rückzug: ' + (mil.autoRetreat !== false ? 'an' : 'aus') + '</button></div>' +
+        '<p class="muted">Eingegrabene Truppen verteidigen sich besser, Erfahrung macht stärker, ohne Nachschub (eigenes Land in etwa 40 km) zehren Truppen aus. Mehrere Angreifer auf ein Ziel nutzen die Flanke.</p></section>';
       // Kriege
       const wars = Object.entries(mil.wars);
       h += '<section><h4>Kriege</h4>';
@@ -354,14 +356,20 @@
         const days = Math.floor((now - w.since) / 24);
         const sc = S.clamp(w.score, -100, 100);
         const theirs = mil.units.filter(u => u.o === +e).length;
+        const es = M.enemyState(G, +e);
         h += '<div class="war"><div class="war-head"><b>' + S.esc(M.countryName(+e)) + '</b><span>' + days + ' Tage · ' + (w.aggressor === 'player' ? 'dein Angriff' : 'Verteidigung') + '</span></div>' +
           '<div class="bar"><span>Kriegslage</span><span class="track"><i style="' + (sc >= 0 ? 'left:50%;width:' + sc / 2 + '%;background:var(--good)' : 'right:50%;width:' + -sc / 2 + '%;background:var(--bad)') + '"></i></span><span>' + (sc > 0 ? '+' : '') + Math.round(sc) + '</span></div>' +
-          '<div class="kv"><span>Gefallene (eigene / Feind)</span><span>' + S.fmtPop(w.ownLoss) + ' / ' + S.fmtPop(w.enemyLoss) + '</span><span>Feindliche Einheiten</span><span>' + theirs + '</span></div>' +
-          '<div class="chips"><button class="chip" data-peace="' + e + '">Frieden anbieten</button></div></div>';
+          '<div class="kv"><span>Gefallene (eigene / Feind)</span><span>' + S.fmtPop(w.ownLoss) + ' / ' + S.fmtPop(w.enemyLoss) + '</span><span>Feindliche Einheiten</span><span>' + theirs + '</span>' +
+          '<span>Städte des Gegners</span><span>' + es.held + ' von ' + es.all + ' gehalten</span>' +
+          (es.capital ? '<span>Hauptstadt ' + S.esc(es.capital) + '</span><span>' + (es.capitalLost ? '<b style="color:var(--good)">erobert</b>' : 'gehalten') + '</span>' : '') + '</div>' +
+          '<div class="chips"><button class="chip" data-peace="' + e + '">Frieden anbieten</button><button class="chip" data-capit="' + e + '">Kapitulation fordern</button></div></div>';
       }
       h += '</section>';
+      // Annektierte Länder
+      const ann = Object.keys(mil.annexed || {});
+      if (ann.length) h += '<section><h4>Annektiert</h4><p>' + ann.map(e => S.esc(M.countryName(+e)) + ' (seit ' + S.dateStr(mil.annexed[e]) + ')').join(', ') + '</p><p class="muted">Annektierte Länder gehören zu deinem Staatsgebiet. Ihre Städte zahlen Abgaben, solange der Widerstand niedrig bleibt.</p></section>';
       // Nachbarn
-      const neigh = M.neighbours(G).filter(e => !mil.wars[e]);
+      const neigh = M.neighbours(G).filter(e => !mil.wars[e] && !(mil.annexed && mil.annexed[e] !== undefined));
       if (neigh.length) {
         h += '<section><h4>Nachbarn</h4><div class="chips">' + neigh.map(e => '<button class="chip" data-war="' + e + '" title="Krieg erklären">' + S.esc(M.countryName(e)) + (mil.truce[e] > G.month ? ' · Waffenstillstand' : '') + '</button>').join('') + '</div><p class="muted">Antippen, um den Krieg zu erklären.</p></section>';
       }
@@ -382,7 +390,8 @@
       const mine = mil.units.filter(u => u.o === home);
       h += '<section><h4>Einheiten</h4><div class="citylist">' + (mine.length ? mine.map(u => {
         const c = S.nearestCity(G, u.x - G.gx0, u.y - G.gy0);
-        return '<button class="cityrow" data-unit="' + u.id + '"><span class="dot" style="background:' + (u.fight || u.under ? 'var(--bad)' : u.path ? 'var(--brass)' : 'var(--good)') + '"></span><span><b>' + M.TYPES[u.type].name + '</b><small>' + unitStatus(G, u).replace(/<[^>]+>/g, '') + (c ? ' · bei ' + S.esc(c.name) : '') + '</small></span><span class="mono">' + Math.max(0, Math.round(u.hp)) + ' %</span></button>';
+        const st = M.stars(u);
+        return '<button class="cityrow" data-unit="' + u.id + '"><span class="dot" style="background:' + (u.fight || u.under ? 'var(--bad)' : u.path ? 'var(--brass)' : 'var(--good)') + '"></span><span><b>' + M.TYPES[u.type].name + (st ? ' ' + '★'.repeat(st) : '') + '</b><small>' + unitStatus(G, u).replace(/<[^>]+>/g, '') + (u.sup === false ? ' · ohne Nachschub' : '') + (c ? ' · bei ' + S.esc(c.name) : '') + '</small></span><span class="mono">' + Math.max(0, Math.round(u.hp)) + ' %</span></button>';
       }).join('') : '<p class="muted">Keine Truppen.</p>') + '</div></section>';
       // Besetzte Städte
       const caps = Object.entries(mil.caps).filter(([, c]) => c.o === home);
@@ -396,6 +405,15 @@
         UI.refresh(true);
       }));
       root.querySelectorAll('[data-war]').forEach(b => b.addEventListener('click', () => confirmWar([+b.dataset.war])));
+      root.querySelectorAll('[data-capit]').forEach(b => b.addEventListener('click', () => {
+        if (G.pendingEvent) return;
+        if (S.Mil.demandCapitulation(G, +b.dataset.capit) && G.pendingEvent) UI.showEvent(G.pendingEvent);
+        UI.refresh(true);
+      }));
+      root.querySelectorAll('[data-retreat]').forEach(b => b.addEventListener('click', () => {
+        G.mil.autoRetreat = G.mil.autoRetreat === false;
+        UI.renderPanel(true);
+      }));
       root.querySelectorAll('[data-bar]').forEach(b => b.addEventListener('click', () => { UI.barracks = G.blds.filter(x => x.b === 18 && !x.occ)[+b.dataset.bar]; UI.renderPanel(true); }));
       root.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => {
         const r = S.Mil.recruit(G, b.dataset.rec, UI.barracks);
@@ -890,8 +908,19 @@
     const now = G.mil.hours;
     if (u.ready > now) return 'In Ausbildung – bereit in ' + UI.realDur(u.ready - now);
     if (u.fight || u.under) return '<span class="err">Im Gefecht</span>';
+    if (u.retreat) return '<span class="warn">Zieht sich zurück</span>';
     if (u.path) { const t = u.path[u.path.length - 1]; return 'Marschiert – Ankunft in ca. ' + UI.realDur(S.Mil.etaHours(G, u, t[0], t[1])); }
-    return 'Bereit';
+    return (u.dig || 0) >= 0.5 ? 'Eingegraben' : 'Bereit';
+  }
+
+  /** Zustand einer Einheit in Kürze: Erfahrung, Stellung, Nachschub */
+  function unitTags(u) {
+    const t = [];
+    const st = S.Mil.stars(u);
+    t.push(st ? '★'.repeat(st) + ' ' + ['', 'Erfahren', 'Veteran', 'Elite'][st] : 'Rekruten');
+    if ((u.dig || 0) > 0.05) t.push('Stellung ' + Math.round(u.dig * 100) + ' %');
+    if (u.sup === false) t.push('<span class="err">ohne Nachschub</span>');
+    return t.join(' · ');
   }
 
   /** Aktionsleiste für ausgewählte Einheiten */
@@ -906,7 +935,7 @@
     let info;
     if (UI.orderMode) info = '<b>Tippe auf das Marschziel.</b> Ein Ziel in einem fremden Land bedeutet Krieg.';
     else if (units.length > 1) info = 'Ø Stärke ' + Math.round(units.reduce((s, u) => s + u.hp, 0) / units.length) + ' % · ' + units.filter(u => u.fight || u.under).length + ' im Gefecht';
-    else info = 'Stärke ' + Math.max(0, Math.round(u0.hp)) + ' % · ' + unitStatus(G, u0) + (own ? '' : '<br>' + T.desc);
+    else info = 'Stärke ' + Math.max(0, Math.round(u0.hp)) + ' % · ' + unitStatus(G, u0) + '<br><small>' + unitTags(u0) + '</small>' + (own ? '' : '<br>' + T.desc);
     $('abInfo').innerHTML = info;
     const ok = $('abOk');
     if (own && !UI.orderMode) {
@@ -1282,7 +1311,7 @@
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
       '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
-      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
+      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Stillstehende Truppen graben sich ein, Erfahrung bringt Sterne, ohne eigenes Land in der Nähe fehlt der Nachschub, und mehrere Angreifer auf ein Ziel nutzen die Flanke. Fällt die Hauptstadt des Gegners, kapituliert er: Du kannst das ganze Land annektieren. Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });

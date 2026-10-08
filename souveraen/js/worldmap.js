@@ -268,7 +268,7 @@
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.font = '700 11px "Big Shoulders Display", "Public Sans", system-ui, sans-serif';
     for (const [it, , d] of visible) {
-      if (d < 0.35) continue;
+      if (d < 0.35 || (WM.hidden && WM.hidden.has(it))) continue;
       const w = R * Math.sin(Math.min(1.4, it.mainRad)) * 2;
       if (w < 64 && it !== WM.sel) continue;
       const p = it.center;

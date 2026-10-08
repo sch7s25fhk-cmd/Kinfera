@@ -35,11 +35,12 @@
     R.viewCv.width = G.W; R.viewCv.height = G.H;
     R.viewKey = null;
     if (!R.globe) {
-      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2, overlay: (c, g) => { if (R.G) S.Terr.drawGlobe(c, g, terrColor); } });
+      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2, overlay: (c, g) => { if (R.G) S.Terr.drawGlobe(c, g, terrColor); S.FX.globeClouds(c, g, performance.now() / 1000); } });
       R.globe.init(canvas, () => {});
     }
     S.Terr.reset(G);
     S.Terr.update(G, true);
+    R.globe.hidden = new Set(Object.keys((G.mil && G.mil.annexed) || {}).map(e => R.globe.items[e - 1]));
     R.globe.sel = R.globe.itemById(G.meta.id) || null;
     R.resize();
   };
@@ -113,6 +114,15 @@
     for (const e of R.ochunks.values()) if (!e.stale && hit(e, OCH)) e.stale = true;
   };
 
+  /** Ein Land wurde annektiert: Gebietsebene und alle Kartenblöcke neu */
+  R.annexed = function () {
+    S.Terr.reset(R.G);
+    S.Terr.update(R.G, true);
+    for (const e of R.chunks.values()) e.stale = true;
+    for (const e of R.ochunks.values()) e.stale = true;
+    R.globe.hidden = new Set(Object.keys(R.G.mil.annexed || {}).map(e => R.globe.items[e - 1]));
+  };
+
   /** Das eigene Raster ist gewachsen (erobertes Land): Kamera mitschieben, alles neu zeichnen */
   R.gridGrown = function (dx, dy) {
     const G = R.G;
@@ -172,7 +182,7 @@
     const near = World.citiesNear(gx0, gy0, W, H).filter(n => n.c.cid !== G.meta.id);
     const foreignIdx = new Map();
     const GT = G.t;
-    const occ = G.mil ? G.mil.occ : null;
+    const occ = G.mil ? G.mil.occ : null, annexed = G.mil && G.mil.annexed;
     const homeIdx = World.homeIdx, WTw = World.WT;
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const id = j * W + i;
@@ -183,7 +193,8 @@
         for (const k in t) if (GT[k]) t[k][id] = GT[k][gi];
         if (t.bld[id] || t.road[id]) continue;
       } else if (occ) {
-        const v = occ[(((gx0 + i) % WTw) + WTw) % WTw + ',' + (gy0 + j)];
+        let v = occ[(((gx0 + i) % WTw) + WTw) % WTw + ',' + (gy0 + j)];
+        if (v === undefined && annexed && annexed[bo] !== undefined) v = homeIdx;
         if (v !== undefined) { t.owner[id] = v; t.region[id] = v === 0 ? 0 : v === homeIdx ? 1 : 2; }
       }
       if (!bo || bo === homeIdx || t.elev[id] < 0) continue;
@@ -1341,6 +1352,11 @@
         c.strokeRect(R.hover[0] * TS + 0.5, R.hover[1] * TS + 0.5, TS - 1, TS - 1);
       }
     }
+    // Frontlinien und Wolken
+    const Tsec = (time || 0) / 1000;
+    if (G.mil) S.FX.front(c, G, z, dpr, ppt, Tsec);
+    S.FX.clouds(c, G, z, dpr, ppt, Tsec);
+    c.globalAlpha = flatA;
     // 7) Bildschirm-Ebene: Warnungen und Namen
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (z > 0.45) {
@@ -1524,18 +1540,6 @@
       if (sel.has(u.id)) { c.fillStyle = '#fff'; c.beginPath(); c.arc(tx, ty, 4, 0, Math.PI * 2); c.fill(); }
     }
     c.setLineDash([]);
-    // Gefechte
-    for (const u of G.mil.units) {
-      if (!u.fight) continue;
-      const v = byId.get(u.fight);
-      if (!v) continue;
-      const [x0, y0] = R.gToScreen(u.x, u.y), [x1, y1] = R.gToScreen(v.x, v.y);
-      const ph = (T * 3 + u.id * 0.37) % 1;
-      c.strokeStyle = 'rgba(255,' + Math.round(120 + 100 * ph) + ',60,' + (0.85 - ph * 0.6).toFixed(2) + ')';
-      c.lineWidth = 2;
-      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + (x1 - x0) * ph, y0 + (y1 - y0) * ph); c.stroke();
-      if (ph > 0.75) { c.fillStyle = 'rgba(255,200,80,0.9)'; c.beginPath(); c.arc(x1 + (Math.sin(u.id + T * 7) * 5), y1 + Math.cos(u.id + T * 5) * 5, 3 + (ph - 0.75) * 16, 0, Math.PI * 2); c.fill(); }
-    }
     // Einnahmeradius ausgewählter Infanterie
     const tpx = TS * R.cam.z;
     c.setLineDash([4, 4]); c.lineWidth = 1.4;
@@ -1551,7 +1555,7 @@
     // Spielsteine (eigene zuletzt, damit sie oben liegen)
     const list = G.mil.units.slice().sort((a, b) => (a.o === home) - (b.o === home));
     for (const u of list) {
-      const [x, y] = R.gToScreen(u.x, u.y);
+      let [x, y] = R.gToScreen(u.x, u.y);
       if (x < -30 || y < -30 || x > R.cw + 30 || y > R.ch + 30) continue;
       const w = 34, h = 25;
       const training = u.ready > now;
@@ -1561,6 +1565,9 @@
         c.beginPath(); c.arc(x, y, 23, 0, Math.PI * 2); c.fill();
       }
       const col = R.unitColor(u.o);
+      // marschierende Einheiten wippen leicht
+      if (u.path && !u.fight && !u.under && !training) y += Math.sin(T * 9 + u.id) * 1.2;
+      c.fillStyle = 'rgba(0,0,0,0.28)'; c.beginPath(); c.ellipse(x + 2, y + h / 2 + 2, w / 2 + 1, 4, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(c, x - w / 2 + 2, y - h / 2 + 2, w, h, 6); c.fill();
       c.fillStyle = col; roundRect(c, x - w / 2, y - h / 2, w, h, 6); c.fill();
       const ink = u.o === home ? '#1b2531' : '#ffffff';
@@ -1572,8 +1579,13 @@
       c.fillStyle = u.hp > 60 ? '#5fbf7f' : u.hp > 30 ? '#f0b23a' : '#e5574e';
       c.fillRect(x - w / 2, y + h / 2 + 2, w * Math.max(0, u.hp) / 100, 4);
       if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; roundRect(c, x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 12, 8); c.stroke(); }
+      S.FX.unitDeco(c, u, x, y, w, h, T);
       if (training) { c.fillStyle = '#fff'; c.font = '600 9px "Public Sans", system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('Ausbildung', x, y - h / 2 - 6); }
     }
+    // Gefechte und Explosionen über den Spielsteinen
+    c.globalAlpha = R.flatA;
+    S.FX.combat(c, G, T, byId);
+    S.FX.events(c, G, time || performance.now());
     c.globalAlpha = R.flatA;
   }
 
@@ -1584,6 +1596,7 @@
     const a = c.globalAlpha;
     c.globalAlpha = a * S.clamp((7 - ppt) / 3, 0, 1);
     for (const it of items) {
+      if (R.globe.hidden && R.globe.hidden.has(it)) continue;
       const [sx, sy] = lonLatToScreen(G, it.cLon, it.cLat);
       if (sx < -60 || sy < -20 || sx > R.cw + 60 || sy > R.ch + 20) continue;
       const w = (it.lbox[2] - it.lbox[0]) / 360 * World.WT * TS * R.cam.z;
@@ -1613,7 +1626,8 @@
       const w = c.measureText(name).width + 12;
       if (overlaps(placed, sx - w / 2, sy - 1, sx + w / 2, sy + 16)) continue;
       placed.push([sx - w / 2, sy - 1, sx + w / 2, sy + 16]);
-      c.fillStyle = 'rgba(245,240,228,0.85)';
+      const ours = G.mil && S.Mil.owner(G, gx, gy) === World.homeIdx;
+      c.fillStyle = ours ? 'rgba(232,178,58,0.92)' : 'rgba(245,240,228,0.85)';
       roundRect(c, sx - w / 2, sy - 1, w, 17, 5); c.fill();
       if (city.capital) { c.fillStyle = '#8a3b2c'; c.beginPath(); c.arc(sx - w / 2 + 5, sy + 7.5, 2.2, 0, Math.PI * 2); c.fill(); }
       c.fillStyle = '#2b3440';

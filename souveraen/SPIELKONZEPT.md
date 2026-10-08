@@ -88,6 +88,13 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Eine durchgehende Welt:** Die ganze Erde liegt in einem gemeinsamen Feldraster (Mercator). Gelände, Klima, Wälder, Rohstoffe, Ländergrenzen und die echten Großstädte fremder Länder werden beim Hinsehen berechnet – überall gleich, ohne Nähte. Das eigene Land ist das Fenster in diese Welt, das simuliert und bebaut wird.
 - **Stufenloser Zoom** vom Weltall bis zu einzelnen Häusern: 3D-Globus → flache Weltkarte mit Ländern → Landkarte mit Gelände, Städten und Straßen → Detailansicht (4-fach). Die Stufen blenden ineinander über, die Kamera ist für alle dieselbe. Neue Spiele beginnen mit einem Anflug aus dem All. Man kann frei über die Grenzen hinaus durch die ganze Welt scrollen; „Zu meinem Land“ fliegt zurück.
 
+### Grafik
+- **Gefechte** sind sichtbar: Infanterie feuert Leuchtspurgarben, Panzer schießen mit Mündungsfeuer und Einschlag, Artillerie schickt Granaten im Bogen mit Explosion und Druckwelle. Vernichtete Einheiten hinterlassen ein brennendes Wrack mit Rauchsäule.
+- **Frontlinien** zwischen dir und Kriegsgegnern glühen rot und laufen sichtbar entlang der Grenze.
+- **Einheiten** werfen Schatten, wippen auf dem Marsch und zeigen Sterne, Stellung, fehlenden Nachschub und Rückzug.
+- **Wolken** ziehen mit Schatten über die Weltkarte und den Globus und blenden sich beim Hineinzoomen aus.
+- Städte annektierter oder eroberter Länder tragen goldene Namensschilder.
+
 ### Touch-Steuerung
 
 - Ein Finger verschiebt die Karte (mit Schwung), zwei Finger zoomen (ebenfalls mit Schwung), doppelt tippen zoomt hinein, kurz mit zwei Fingern tippen zoomt heraus, + / − als Knöpfe für die Einhandbedienung.
@@ -117,11 +124,18 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - Truppen werden in **Kasernen** ausgebildet (Stunden bis Tage Spielzeit). **Festungen** verdoppeln fast die Verteidigung auf ihrem Feld.
 - Steuerung: Einheit antippen → „+ Truppen ringsum“ für eine Gruppe → „Marschziel“ → Ziel antippen. Ein Ziel im Nachbarland löst eine Kriegserklärung mit allen Folgen aus.
 - **Gefechte** entstehen automatisch, wenn Gegner in Kontakt kommen. Gelände (Berge, Hügel, Wald, Stadt), Heimvorteil und Festungen stärken die Verteidiger; beschädigte Einheiten erholen sich auf eigenem Boden.
+- **Eingraben:** Wer stillsteht, baut in etwa 12 Spielstunden eine Stellung (bis +35 % Verteidigung, Sandsäcke am Spielstein). Artillerie bricht Stellungen zu großen Teilen.
+- **Erfahrung:** Kämpfen und Siege bringen bis zu drei Sterne (Erfahren, Veteran, Elite) und bis zu +25 % Kampfkraft.
+- **Nachschub:** Ohne eigenes Land in etwa 40 km Umkreis kämpft eine Einheit schwächer, marschiert langsamer und zehrt aus (rotes Ausrufezeichen).
+- **Flanke und Typen:** Jeder weitere Angreifer auf dasselbe Ziel bringt +15 % (bis +45 %). Panzer sind im offenen Gelände stark, in Wald, Bergen und Städten schwach; Infanterie lauert Panzern dort auf. Angeschlagene Ziele werden bevorzugt.
+- **Rückzug:** Eigene Einheiten unter 22 % Stärke ziehen sich selbst in die nächste eigene Stadt zurück (im Militär-Panel abschaltbar).
 - **Bilder:** Jede Einheit zeigt ihr Bild (Soldat, Panzer, Geschütz) und blickt in Marschrichtung; darunter der Stärkebalken.
 - **Fronten:** Nur **Infanterie** gewinnt Gelände. Steht sie auf feindlichem Boden, wechselt alles im Umkreis von etwa 15 km den Besitzer (ausgewählte Infanterie zeigt den Kreis gestrichelt) – die Grenze wandert mit. Felder, die näher an einer feindlichen Einheit liegen, bleiben beim Gegner: Die Front liegt zwischen den Truppen. Stadtgebiete werden nicht über den Umkreis eingenommen.
 - **Kessel:** Ein Stück Feindesland, das ganz von deinem Gebiet (und Meer) umschlossen ist und in dem keine feindlichen Truppen stehen, fällt dir zu – Stadtgebiete darin bleiben, bis Infanterie ihren Mittelpunkt erreicht. Umgekehrt gilt das auch für eingeschlossenes eigenes Land.
 - **Grenzen auf allen Zoomstufen:** Erobertes Land erscheint auf dem Globus, auf der Weltkarte und in der Landkarte in der Farbe seines neuen Besitzers, mit der neuen Grenzlinie; die alte Grenze verschwindet. Verlorenes eigenes Land wechselt genauso die Farbe.
 - **Städte** sind erobert, sobald Infanterie ihren Mittelpunkt erreicht – Panzer und Artillerie können sie freikämpfen, aber nicht besetzen. Fällt die eigene Hauptstadt, kapituliert die Regierung.
+- **Städte erobern** sichert auch ihr Umland (etwa 3 Felder um das Stadtgebiet), soweit dort keine feindlichen Truppen näher stehen.
+- **Kapitulation und Annexion:** Fällt die Hauptstadt, hält der Gegner kaum noch Städte oder steht der Krieg klar für dich, bietet er die Kapitulation an – oder du forderst sie im Militär-Panel. Dann wählst du: das **ganze Land annektieren** (es wird Teil deines Staatsgebiets, seine Städte zahlen Abgaben gegen Widerstand, Sanktionen verlängern sich) oder Frieden mit Gebietsgewinn und Reparationen.
 - **Erobertes Land bebauen:** Erobertes Gebiet wird Teil des eigenen Staatsgebiets. Liegt es außerhalb des bisher verwalteten Kartenausschnitts, wächst dieser automatisch mit (bis etwa 95 000 Felder, damit Simulation und Spielstand handlich bleiben). Dort lässt sich alles bauen: Straßen, Betriebe, Zonen und neue Städte – mit mindestens 6 Feldern Abstand zu bestehenden und eroberten Städten; eroberte Städte bleiben, wie sie sind.
 
 ### Gegner
@@ -152,6 +166,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
+| `js/effects.js` | Gefechtseffekte (Leuchtspur, Granaten, Explosionen, Wracks), Frontlinien, Wolken, Abzeichen der Einheiten |
 | `js/territory.js` | Verschobene Grenzen: eroberte und verlorene Gebiete auf Globus und Weltkarte |
 | `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |
 | `js/worldmap.js` | 3D-Globus (Länderwahl und weiteste Zoomstufe im Spiel) |

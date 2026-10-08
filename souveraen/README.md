@@ -32,7 +32,7 @@ python3 tools/build_single.py            # schreibt dist/souveraen.html
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
 | Truppen führen | Einheit antippen, „+ Truppen ringsum“ für eine Gruppe, „Marschziel“, Ziel antippen |
-| Land erobern | mit Infanterie über die Grenze marschieren (Umkreis ~15 km); eine Stadt fällt, wenn Infanterie ihren Mittelpunkt erreicht. Eingeschlossenes Feindesland ohne feindliche Truppen fällt automatisch zu. Erobertes Land ist danach normal bebaubar, auch mit neuen Städten; die neue Grenze zeigen Globus, Weltkarte und Landkarte |
+| Land erobern | mit Infanterie über die Grenze marschieren (Umkreis ~15 km); eine Stadt fällt, wenn Infanterie ihren Mittelpunkt erreicht. Eingeschlossenes Feindesland ohne feindliche Truppen fällt automatisch zu. Fällt die Hauptstadt des Gegners, kapituliert er, und du kannst das ganze Land annektieren. Erobertes Land ist danach normal bebaubar, auch mit neuen Städten; die neue Grenze zeigen Globus, Weltkarte und Landkarte |
 
 Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten). Die Welt läuft weiter, wenn die App geschlossen ist; beim Öffnen wird bis zu ein Jahr nachgerechnet und ein Lagebericht gezeigt. Am Computer läuft das Spiel als Handy-Rahmen in der Fenstermitte; Mausrad zoomt.
 
@@ -42,6 +42,7 @@ Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten
 node tools/simtest.js DEU EGY JPN --months=120   # Simulation ohne Browser testen
 node tools/wartest.js DEU FRA 20                  # Krieg ohne Browser durchspielen (Tage)
 node tools/growtest.js DEU FRA 25                 # erobertes Land ins Raster übernehmen und dort eine Stadt gründen
+node tools/annextest.js DEU LUX 10                # Hauptstadt erobern, Kapitulation, ganzes Land annektieren
 python3 tools/build_data.py ne_50m_admin_0_countries.geojson ne_50m_populated_places_simple.geojson > js/data/world.js
 ```
 

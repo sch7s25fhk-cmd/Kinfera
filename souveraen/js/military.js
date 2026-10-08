@@ -70,18 +70,23 @@
   M.baseOwner = baseOwner;
   M.resetCache = () => { memo.clear(); if (typeof tmemo !== 'undefined') tmemo.clear(); };
 
+  /** Grundbesitz nach Annexionen: ein annektiertes Land gehört ganz dem Spieler */
+  M.mapAnnex = (G, o) => (o && G.mil && G.mil.annexed && G.mil.annexed[o] !== undefined ? M.home() : o);
+  /** Besitz ohne Kriegsgewinne (ursprüngliche Grenzen plus Annexionen) */
+  M.defOwner = (G, gx, gy) => M.mapAnnex(G, baseOwner(gx, gy));
+
   /** aktuelle Landeszugehörigkeit eines Feldes */
   M.owner = function (G, gx, gy) {
     const [lx, ly] = local(G, gx, gy);
     if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) return G.t.owner[ly * G.W + lx];
     const o = G.mil.occ[M.key(gx, gy)];
-    return o !== undefined ? o : baseOwner(gx, gy);
+    return o !== undefined ? o : M.defOwner(G, gx, gy);
   };
 
   M.setOwner = function (G, gx, gy, o) {
     const k = M.key(gx, gy);
     const [lx, ly] = local(G, gx, gy);
-    const base = baseOwner(gx, gy);
+    const base = M.defOwner(G, gx, gy);
     if (o === base) delete G.mil.occ[k]; else G.mil.occ[k] = o;
     G._occChange = (G._occChange || 0) + 1;
     if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) {
@@ -257,6 +262,39 @@
   };
 
   // ======================= Simulation =======================
+  const xpMul = (u) => 1 + 0.25 * Math.min(1, u.xp || 0);
+  /** Erfahrungssterne 0–3 */
+  M.stars = (u) => { const x = u.xp || 0; return x >= 1 ? 3 : x >= 0.6 ? 2 : x >= 0.25 ? 1 : 0; };
+  /** Ereignis für die Darstellung (Explosionen); wird nicht gespeichert */
+  function fx(G, e) {
+    const l = G._fx || (G._fx = []);
+    l.push(e);
+    if (l.length > 60) l.shift();
+  }
+  /** Versorgt: eigenes Gebiet in etwa 40 km Umkreis */
+  function supplied(G, u) {
+    if (u.o === -1) return true;
+    const mine = u.o;
+    if (M.owner(G, u.x, u.y) === mine) return true;
+    const R = S.clamp(40 / M.kmAt(u.y), 2, 14);
+    for (const f of [0.5, 1]) for (let k = 0; k < 16; k++) {
+      const a = k / 16 * Math.PI * 2;
+      if (M.owner(G, u.x + Math.cos(a) * R * f, u.y + Math.sin(a) * R * f) === mine) return true;
+    }
+    return false;
+  }
+  M.supplied = supplied;
+  function nearestHomeCity(G, u) {
+    const home = M.home();
+    let best = null, bd = 1e9;
+    for (const c of G.cities) {
+      if (G.t.owner[c.y * G.W + c.x] !== home) continue;
+      const gx = c.x + G.gx0 + 0.5, gy = c.y + G.gy0 + 0.5, d = Math.hypot(gx - u.x, gy - u.y);
+      if (d < bd) { bd = d; best = [gx, gy]; }
+    }
+    return best;
+  }
+
   /** Militär um `hours` Spielstunden fortschreiben (in Schritten von höchstens 1 Stunde) */
   M.advance = function (G, hours) {
     if (!G.mil) return;
@@ -271,8 +309,12 @@
     const mil = G.mil, units = mil.units, home = M.home();
     mil.hours += h;
     const now = mil.hours;
-    // 1) Kontakt und Kampf
-    for (const u of units) { u.fight = 0; u.under = false; }
+    // 0) Versorgung: eigenes Gebiet in Reichweite?
+    mil.supAcc = (mil.supAcc || 0) + h;
+    if (mil.supAcc >= 2) { mil.supAcc = 0; for (const u of units) u.sup = supplied(G, u); }
+    // 1) Kontakt: Ziele wählen
+    for (const u of units) { u.fight = 0; u.under = 0; }
+    const hits = [];
     for (const u of units) {
       if (u.ready > now || u.hp <= 0) continue;
       const km = M.kmAt(u.y), T = M.TYPES[u.type];
@@ -281,41 +323,69 @@
       for (const v of units) {
         if (v === u || v.ready > now || !hostileUnits(G, u, v)) continue;
         const d = Math.hypot(v.x - u.x, v.y - u.y);
-        if (d <= range && d < bd) { bd = d; best = v; }
+        // angeschlagene Ziele bevorzugen (leichter Abzug auf die Entfernung)
+        const score = d * (0.75 + 0.25 * Math.max(0, v.hp) / 100);
+        if (d <= range && score < bd) { bd = score; best = v; }
       }
       if (!best) continue;
       u.fight = best.id;
-      best.under = true;
-      const tgtT = M.TYPES[best.type];
-      let def = tgtT.def * terrainDef(G, best.x, best.y);
+      best.under++;
+      hits.push([u, best]);
+    }
+    // 2) Schaden: Gelände, Eingraben, Erfahrung, Versorgung, Einheitentyp und Flanke
+    for (const [u, best] of hits) {
+      const T = M.TYPES[u.type], tgtT = M.TYPES[best.type];
+      const terr = terrainDef(G, best.x, best.y);
+      let def = tgtT.def * terr;
       if (M.owner(G, best.x, best.y) === (best.o === -1 ? best.orig : best.o)) def *= 1.1; // Heimvorteil
+      def *= 1 + 0.35 * (best.dig || 0) * (u.type === 'art' ? 0.4 : 1);                 // Artillerie bricht Stellungen
+      def *= xpMul(best);
       def = Math.pow(def, 0.8); // Boni wirken, ohne Angriffe aussichtslos zu machen
-      const dmg = T.atk * Math.pow(Math.max(0, u.hp) / 100, 0.7) * 7.5 * h * (0.7 + rnd() * 0.6) / def;
+      let atk = T.atk * xpMul(u);
+      if (u.type === 'tank') atk *= terr >= 1.2 ? 0.75 : best.type === 'tank' ? 1 : 1.25; // Panzer: stark im Offenen
+      if (u.type === 'inf' && best.type === 'tank' && terr >= 1.2) atk *= 1.2;          // Hinterhalt im Wald, in Bergen, Städten
+      if (u.sup === false) atk *= 0.75;
+      const flank = Math.min(1.45, 1 + 0.15 * (best.under - 1));
+      const dmg = atk * Math.pow(Math.max(0, u.hp) / 100, 0.7) * 7.5 * h * (0.7 + rnd() * 0.6) * flank / def;
       best.hp -= dmg;
+      u.xp = Math.min(1, (u.xp || 0) + 0.012 * h);
+      best.xp = Math.min(1, (best.xp || 0) + 0.006 * h);
       const men = dmg / 100 * tgtT.men;
       if (best.o === home) { mil.lossMen += men; const w = mil.wars[u.o]; if (w) w.ownLoss += men; }
       else { const w = mil.wars[best.o]; if (w) w.enemyLoss += men; }
     }
-    // 2) Verluste
+    // 3) Verluste
     for (let i = units.length - 1; i >= 0; i--) {
       const u = units[i];
       if (u.hp > 0) continue;
       units.splice(i, 1);
+      fx(G, { k: 'boom', x: u.x, y: u.y, o: u.o, type: u.type });
+      for (const v of units) if (v.fight === u.id) v.xp = Math.min(1, (v.xp || 0) + 0.12);
       if (u.o === home) S.log(G, M.TYPES[u.type].name + ' wurde vernichtet.', 'bad');
       else { const w = mil.wars[u.o]; if (w) { w.score += 4; } }
       if (u.o === home) for (const [e, w] of Object.entries(mil.wars)) if (units.some(v => v.o === +e && v.fight === u.id)) w.score -= 4;
     }
-    // 3) Bewegung (nicht im Gefecht), Erholung
+    // 4) Bewegung (nicht im Gefecht), Erholung, Eingraben, Rückzug
     for (const u of units) {
       if (u.ready > now) continue;
       const T = M.TYPES[u.type];
       const engaged = u.fight || u.under;
       const o = M.owner(G, u.x, u.y);
-      if (!engaged) u.hp = Math.min(100, u.hp + (o === u.o ? 1.6 : 0.4) * h);
-      if (engaged && !u.retreat) continue;
-      if (!u.path || !u.path.length) continue;
+      if (!engaged) {
+        if (u.sup === false) u.hp = Math.max(20, u.hp - 0.35 * h);                    // ohne Nachschub zehrt die Truppe aus
+        else u.hp = Math.min(100, u.hp + (o === u.o ? 1.6 : 0.4) * h);
+      }
+      // eigene Einheiten ziehen sich bei schweren Verlusten selbst zurück
+      if (u.o === home && u.hp < 22 && !u.retreat && mil.autoRetreat !== false) {
+        const c = nearestHomeCity(G, u);
+        if (c && Math.hypot(c[0] - u.x, c[1] - u.y) > 1.5) {
+          u.path = [c]; u.retreat = true;
+          S.log(G, M.TYPES[u.type].name + ' zieht sich schwer angeschlagen zurück.', 'warn');
+        }
+      }
+      if ((engaged && !u.retreat) || !u.path || !u.path.length) { u.dig = Math.min(1, (u.dig || 0) + h / 12); continue; }
       const [tx, ty] = u.path[0];
-      const speed = T.km / 24 / M.kmAt(u.y) * (u.retreat ? 0.8 : 1);
+      const speed = T.km / 24 / M.kmAt(u.y) * (u.retreat ? 0.8 : 1) * (u.sup === false ? 0.85 : 1);
       const d = Math.hypot(tx - u.x, ty - u.y);
       const stepLen = speed * h;
       let nx, ny;
@@ -325,8 +395,9 @@
       if (!no) { u.path = null; continue; } // Küste
       if (no !== u.o && !M.atWar(G, u.o, no)) { u.path = null; continue; } // Grenze zu neutralem Land
       u.x = nx; u.y = ny;
+      u.dig = 0;
     }
-    // 4) Gebietsgewinn – nur Infanterie nimmt Land ein (sobald sie sich bewegt oder regelmäßig im Stand)
+    // 5) Gebietsgewinn – nur Infanterie nimmt Land ein (sobald sie sich bewegt oder regelmäßig im Stand)
     for (const u of units) {
       if (u.ready > now || u.type !== 'inf') continue;
       u.capAcc += h;
@@ -335,10 +406,10 @@
       u.capAcc = 0; u.lcx = u.x; u.lcy = u.y;
       capture(G, u);
     }
-    // 4b) eingeschlossene Gebiete fallen an den, der sie umschließt
+    // 5b) eingeschlossene Gebiete fallen an den, der sie umschließt
     mil.pocketAcc = (mil.pocketAcc || 0) + h;
     if (mil.pocketAcc >= 3 && G._occChange !== mil._pocketSeen) { mil.pocketAcc = 0; mil._pocketSeen = G._occChange; closePockets(G); }
-    // 5) KI
+    // 6) KI
     mil.aiAcc += h;
     if (mil.aiAcc >= 1) { mil.aiAcc = 0; ai(G); }
   }
@@ -405,6 +476,7 @@
       const w = x1 - x0 + 1, h = y1 - y0 + 1;
       if (w * h > 160000) continue;
       const own = W().ownerBlock(x0, y0, w, h);
+      if (mil.annexed) for (let i = 0; i < own.length; i++) own[i] = M.mapAnnex(G, own[i]);
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const gx = x0 + i, gy = y0 + j;
         const [lx, ly] = local(G, gx, gy);
@@ -482,10 +554,15 @@
       if (cur === mine || !cur) continue;
       if (!M.atWar(G, u.o, cur)) continue;
       const R = Math.ceil(n.c.r + 1);
-      for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) {
+      // Stadt und Umland (soweit dort keine feindlichen Truppen näher stehen)
+      const RU = n.c.r + 3.5, Ri = Math.ceil(RU);
+      const foes = mil.units.filter(v => v.o === cur && Math.abs(v.x - n.gx) < RU + 4 && Math.abs(v.y - n.gy) < RU + 4);
+      for (let oy = -Ri; oy <= Ri; oy++) for (let ox = -Ri; ox <= Ri; ox++) {
         const gx = Math.floor(n.gx) + ox, gy = Math.floor(n.gy) + oy;
-        if (Math.hypot(gx + 0.5 - n.gx, gy + 0.5 - n.gy) > n.c.r + 0.8) continue;
-        if (M.owner(G, gx, gy) === cur) M.setOwner(G, gx, gy, mine);
+        const d = Math.hypot(gx + 0.5 - n.gx, gy + 0.5 - n.gy);
+        if (d > RU || M.owner(G, gx, gy) !== cur) continue;
+        if (d > n.c.r + 0.8 && foes.some(v => Math.hypot(gx + 0.5 - v.x, gy + 0.5 - v.y) < d)) continue;
+        M.setOwner(G, gx, gy, mine);
       }
       const key = n.c.cid + ':' + n.c.name;
       mil.caps[key] = { o: mine, since: G.month, res: 0.3 };
@@ -552,8 +629,9 @@
         const cities = enemyCities(G, e);
         const city = cities[Math.floor(rnd() * Math.min(3, cities.length))];
         if (city) M.spawn(G, e, rnd() < 0.25 ? 'tank' : rnd() < 0.15 ? 'art' : 'inf', city.gx + (rnd() - 0.5) * 2, city.gy + (rnd() - 0.5) * 2, { role: rnd() < 0.35 ? 'def' : 'atk' });
-        else if (!cities.length) { M.makePeace(G, e, M.countryName(e) + ' hat bedingungslos kapituliert. Alle eroberten Gebiete gehören dir.'); continue; }
       }
+      // Kapitulation: Hauptstadt verloren oder kaum noch Städte
+      if (checkCapitulation(G, e, war)) continue;
       // Haltung wechseln
       if (now - war.modeAt > 48) {
         war.modeAt = now;
@@ -608,6 +686,82 @@
       if (best) setPath(G, u, best.x, best.y);
     }
   }
+
+  /** Lage eines Gegners: Städte gesamt, gehalten, Hauptstadt */
+  M.enemyState = function (G, e) {
+    const all = W().cities.filter(c => c.ci === e);
+    const held = all.filter(c => M.owner(G, c.gx, c.gy) === e);
+    const cap = all.find(c => c.capital);
+    return { all: all.length, held: held.length, capital: cap ? cap.name : null, capitalLost: !!cap && M.owner(G, cap.gx, cap.gy) !== e };
+  };
+
+  /** Bietet der Gegner die Kapitulation an? */
+  function checkCapitulation(G, e, war) {
+    if (G.pendingEvent || G.mil.hours - (war.capAsk || -999) < 48) return false;
+    const st = M.enemyState(G, e);
+    const broken = !st.held || (st.capitalLost && war.score > 10) || (st.all >= 3 && st.held <= st.all * 0.3 && war.score > 20);
+    if (!broken) return false;
+    war.capAsk = G.mil.hours;
+    offerCapitulation(G, e, st);
+    return true;
+  }
+
+  function offerCapitulation(G, e, st) {
+    const name = M.countryName(e), war = G.mil.wars[e];
+    const pay = Math.round(120 + Math.max(0, war.score) * 8);
+    G.pendingEvent = {
+      title: name + ' kapituliert', auto: 1,
+      text: (st.capitalLost ? 'Die Hauptstadt ' + st.capital + ' ist gefallen. ' : '') + name + ' hält nur noch ' + st.held + ' von ' + st.all + ' Städten und bietet die Kapitulation an. Du kannst das ganze Land annektieren – es wird Teil deines Staatsgebiets, verlangt aber Besatzung gegen Widerstand und verlängert die Sanktionen – oder Frieden schließen, die eroberten Gebiete behalten und Reparationen kassieren.',
+      choices: [
+        { label: 'Ganzes Land annektieren', fx: (G) => M.annex(G, e) },
+        { label: 'Frieden, Gebiete behalten (+' + S.fmtMoney(pay) + ')', fx: (G) => { G.eco.money += pay; M.makePeace(G, e, name + ' hat kapituliert. Die eroberten Gebiete bleiben bei dir, dazu ' + S.fmtMoney(pay) + ' Reparationen.'); } },
+        { label: 'Weiterkämpfen', fx: () => {} }
+      ]
+    };
+  }
+
+  /** Spieler fordert die Kapitulation */
+  M.demandCapitulation = function (G, e) {
+    const war = G.mil.wars[e];
+    if (!war) return false;
+    const st = M.enemyState(G, e);
+    const ok = !st.held || st.capitalLost || (st.held <= st.all * 0.5 && war.score > 15) || war.score > 45;
+    if (!ok) { S.log(G, M.countryName(e) + ' denkt nicht an Kapitulation: Es hält noch ' + st.held + ' von ' + st.all + ' Städten.', 'warn'); return false; }
+    war.capAsk = G.mil.hours;
+    offerCapitulation(G, e, st);
+    return true;
+  };
+
+  /** Ein Land vollständig eingliedern */
+  M.annex = function (G, e) {
+    const mil = G.mil, home = M.home(), name = M.countryName(e);
+    mil.annexed = mil.annexed || {};
+    mil.annexed[e] = G.month;
+    // Kriegszustand beenden, feindliche Truppen lösen sich auf
+    delete mil.wars[e];
+    mil.truce[e] = 1e9;
+    mil.units = mil.units.filter(u => u.o !== e);
+    // eigenes Raster: das ganze Land gehört jetzt dir
+    for (let i = 0; i < G.W * G.H; i++) {
+      if (G.t.owner[i] === e) { G.t.owner[i] = home; G.t.region[i] = 1; }
+    }
+    // Besetzungen aufräumen: Gewinne des Annektierten gehen mit über, was dem Grundbesitz entspricht, entfällt
+    for (const k in mil.occ) {
+      const p = k.indexOf(','), def = M.defOwner(G, +k.slice(0, p), +k.slice(p + 1));
+      if (mil.occ[k] === e) { if (def === home) delete mil.occ[k]; else mil.occ[k] = home; }
+      else if (mil.occ[k] === def) delete mil.occ[k];
+    }
+    // Städte unter Besatzung: Abgaben, aber Widerstand
+    for (const c of W().cities.filter(c => c.ci === e)) {
+      const key = c.cid + ':' + c.name;
+      if (!mil.caps[key]) mil.caps[key] = { o: home, since: G.month, res: 0.4 };
+    }
+    G._neigh = null; G._netDirty = true;
+    G._occChange = (G._occChange || 0) + 1;
+    G.mods.push({ key: 'sanction', val: 1, months: 24 }, { key: 'happy', val: 5, months: 4 });
+    S.log(G, name + ' wurde annektiert und ist jetzt Teil deines Staatsgebiets.', 'good');
+    if (S.onAnnex) S.onAnnex(e);
+  };
 
   function setPath(G, u, tx, ty) {
     const chk = M.checkPath(G, u, tx, ty);

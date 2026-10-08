@@ -83,6 +83,7 @@
     const [lx, ly] = local(G, gx, gy);
     const base = baseOwner(gx, gy);
     if (o === base) delete G.mil.occ[k]; else G.mil.occ[k] = o;
+    G._occChange = (G._occChange || 0) + 1;
     if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) {
       const i = ly * G.W + lx;
       G.t.owner[i] = o;
@@ -334,6 +335,9 @@
       u.capAcc = 0; u.lcx = u.x; u.lcy = u.y;
       capture(G, u);
     }
+    // 4b) eingeschlossene Gebiete fallen an den, der sie umschließt
+    mil.pocketAcc = (mil.pocketAcc || 0) + h;
+    if (mil.pocketAcc >= 3 && G._occChange !== mil._pocketSeen) { mil.pocketAcc = 0; mil._pocketSeen = G._occChange; closePockets(G); }
     // 5) KI
     mil.aiAcc += h;
     if (mil.aiAcc >= 1) { mil.aiAcc = 0; ai(G); }
@@ -374,6 +378,93 @@
     }
     cityCapture(G, u);
   }
+
+  /**
+   * Kessel schließen: Ein Stück Land eines Kriegsgegners, das vollständig vom anderen Kriegsteilnehmer
+   * (und Meer) umschlossen ist, fällt an diesen – sofern dort keine Truppen des Eigentümers stehen
+   * und kein Stadtmittelpunkt liegt (Städte fallen nur durch Infanterie).
+   */
+  function closePockets(G) {
+    const home = M.home(), mil = G.mil;
+    for (const e of Object.keys(mil.wars).map(Number)) {
+      // Bereich: alle Felder, die in diesem Krieg den Besitzer gewechselt haben
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0;
+      for (const k in mil.occ) {
+        const v = mil.occ[k];
+        if (v !== home && v !== e) continue;
+        const p = k.indexOf(','), gx = +k.slice(0, p), gy = +k.slice(p + 1);
+        const b = baseOwner(gx, gy);
+        if (!((v === home && b === e) || (v === e && b === home))) continue;
+        const [lx] = local(G, gx, gy);
+        const ux = lx + G.gx0;   // nicht umgebrochene Länge nahe dem eigenen Raster
+        x0 = Math.min(x0, ux); x1 = Math.max(x1, ux); y0 = Math.min(y0, gy); y1 = Math.max(y1, gy); n++;
+      }
+      if (!n) continue;
+      const pad = 6;
+      x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      if (w * h > 160000) continue;
+      const own = W().ownerBlock(x0, y0, w, h);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const gx = x0 + i, gy = y0 + j;
+        const [lx, ly] = local(G, gx, gy);
+        if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H) { own[j * w + i] = G.t.owner[ly * G.W + lx]; continue; }
+        const v = mil.occ[M.key(gx, gy)];
+        if (v !== undefined) own[j * w + i] = v < 0 ? 65535 : v;
+      }
+      // Truppen verhindern den Kessel, Stadtgebiete bleiben ausgespart
+      const block = new Uint8Array(w * h), city = new Uint8Array(w * h);
+      const markCity = (gx, gy, r) => {
+        for (let j = Math.floor(gy - r) - y0; j <= Math.ceil(gy + r) - y0; j++) for (let i = Math.floor(gx - r) - x0; i <= Math.ceil(gx + r) - x0; i++) {
+          if (i >= 0 && j >= 0 && i < w && j < h && Math.hypot(x0 + i + 0.5 - gx, y0 + j + 0.5 - gy) <= r) city[j * w + i] = 1;
+        }
+      };
+      for (const u of mil.units) {
+        let [lx] = local(G, u.x, u.y); const i = lx + G.gx0 - x0, j = Math.floor(u.y) - y0;
+        if (i >= 0 && j >= 0 && i < w && j < h) block[j * w + i] = 1;
+      }
+      for (const n of W().citiesNear(x0, y0, w, h)) markCity(n.gx, n.gy, n.c.r + 0.8);
+      for (const c of G.cities) markCity(c.x + G.gx0 + 0.5, c.y + G.gy0 + 0.5, Math.sqrt(Math.max(4, c.tiles) / Math.PI) + 1);
+      const seen = new Uint8Array(w * h), q = new Int32Array(w * h);
+      let gainHome = 0, gainFoe = 0;
+      for (const [a, b] of [[e, home], [home, e]]) {
+        for (let s0 = 0; s0 < w * h; s0++) {
+          if (seen[s0] || own[s0] !== a) continue;
+          // Zusammenhängendes Gebiet von a einsammeln
+          let qh = 0, qt = 0, open = false, blocked = false;
+          q[qt++] = s0; seen[s0] = 1;
+          while (qh < qt) {
+            const i = q[qh++], x = i % w, y = (i / w) | 0;
+            if (block[i]) blocked = true;
+            if (x === 0 || y === 0 || x === w - 1 || y === h - 1) open = true;
+            for (const [ox, oy] of S.N4) {
+              const nx = x + ox, ny = y + oy;
+              if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+              const ni = ny * w + nx, o = own[ni];
+              if (o === a) { if (!seen[ni]) { seen[ni] = 1; q[qt++] = ni; } }
+              else if (o !== b && o !== 0) open = true;   // grenzt an ein drittes Land
+            }
+          }
+          if (open || blocked || qt > 2500) continue;
+          let got = 0;
+          for (let k = 0; k < qt; k++) {
+            const i = q[k];
+            if (city[i]) continue;
+            M.setOwner(G, x0 + (i % w) + 0.5, y0 + ((i / w) | 0) + 0.5, b);
+            got++;
+          }
+          if (b === home) gainHome += got; else gainFoe += got;
+        }
+      }
+      if (gainHome || gainFoe) {
+        const war = mil.wars[e];
+        if (war) war.score += (gainHome - gainFoe) * 0.04;
+        if (gainHome >= 20) S.log(G, 'Eingeschlossenes Gebiet von ' + M.countryName(e) + ' übernommen (' + gainHome + ' Felder).', 'good');
+        if (gainFoe >= 20) S.log(G, M.countryName(e) + ' hat eingeschlossenes Gebiet übernommen (' + gainFoe + ' Felder).', 'bad');
+      }
+    }
+  }
+  M.closePockets = closePockets;
 
   /** Stadt einnehmen: Infanterie hat den Stadtmittelpunkt erreicht */
   function cityCapture(G, u) {

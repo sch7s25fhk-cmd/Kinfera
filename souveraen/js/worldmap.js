@@ -84,6 +84,14 @@
     return [-sl, cl, 0, -cl * sp, -sl * sp, cp, cl * cp, sl * cp, sp];
   }
 
+  /** [lon, lat] -> Bildschirmpunkt [x, y, Tiefe] (Tiefe < 0: Rückseite) */
+  WM.project = function (lon, lat) {
+    const [cx, cy] = center(), R = radius(), m = WM._m || matrix();
+    const v = toXYZ(lon, lat);
+    const d = v[0] * m[6] + v[1] * m[7] + v[2] * m[8];
+    return [cx + R * (v[0] * m[0] + v[1] * m[1]), cy - R * (v[0] * m[3] + v[1] * m[4] + v[2] * m[5]), d];
+  };
+
   /** Bildschirmpunkt -> [lon, lat] oder null */
   function unproject(sx, sy) {
     const [cx, cy] = center(), R = radius();
@@ -189,6 +197,7 @@
     c.save();
     c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.clip();
     const m = matrix();
+    WM._m = m;
     const vx = m[6], vy = m[7], vz = m[8];
     // Gradnetz
     c.strokeStyle = 'rgba(170,210,240,0.14)'; c.lineWidth = 1;
@@ -236,6 +245,8 @@
       const v = visible.find(x => x[0] === WM.sel);
       if (v) { c.strokeStyle = '#fff6dc'; c.lineWidth = 2; c.stroke(v[1]); }
     }
+    // Zusatzebene (z. B. eroberte Gebiete im Spiel)
+    if (opts.overlay) opts.overlay(c, WM);
     // Licht und Schatten der Kugel
     const shade = c.createRadialGradient(cx - R * 0.4, cy - R * 0.45, R * 0.05, cx, cy, R * 1.02);
     shade.addColorStop(0, 'rgba(255,250,235,0.16)');

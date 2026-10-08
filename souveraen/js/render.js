@@ -35,9 +35,11 @@
     R.viewCv.width = G.W; R.viewCv.height = G.H;
     R.viewKey = null;
     if (!R.globe) {
-      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2 });
+      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2, overlay: (c, g) => { if (R.G) S.Terr.drawGlobe(c, g, terrColor); } });
       R.globe.init(canvas, () => {});
     }
+    S.Terr.reset(G);
+    S.Terr.update(G, true);
     R.globe.sel = R.globe.itemById(G.meta.id) || null;
     R.resize();
   };
@@ -72,6 +74,7 @@
   /** Geänderter Besitz irgendwo auf der Welt (Eroberung) */
   R.markDirtyGlobal = function (gx, gy) {
     (R.dirtyG || (R.dirtyG = [])).push(gx, gy);
+    S.Terr.touch(gx, gy);
     R.occVer = (R.occVer || 0) + 1;
   };
   function flushGlobal() {
@@ -432,7 +435,7 @@
       }
     }
     ctx.putImageData(img, 0, 0);
-    R.wtex = cv;
+    R.wtex = cv; R.wtexData = d;
     return cv;
   }
 
@@ -1216,6 +1219,7 @@
     if (!G) return;
     R.frame++;
     R.flush();
+    S.Terr.update(G);
     // Zeitbudget für neue Kartenblöcke: das Bild bleibt flüssig, fehlende Blöcke kommen über mehrere Bilder
     const tNow = performance.now();
     R.frameT0 = tNow; R.renderedNow = 0;
@@ -1283,7 +1287,15 @@
     };
     // 3) politische Flächen weit draußen
     const polA = ppt < 1 ? 0.62 : Math.max(0, 0.62 * (1 - (ppt - 1) / 4));
-    if (ppt < 9) drawPolitical(c, G, z, dpr, polA, ppt, vx0, vy0, vx1, vy1);
+    if (ppt < 9) {
+      drawPolitical(c, G, z, dpr, polA, ppt, vx0, vy0, vx1, vy1);
+      // verschobene Grenzen über die ursprünglichen Ländergrenzen legen
+      S.Terr.drawFlat(c, G, {
+        z, dpr, polA, ppt, vx0, vy0, vx1, vy1, base: flatA, colorOf: terrColor
+      });
+      c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (R.cw / 2 - cam.x * z), dpr * (R.ch / 2 - cam.y * z));
+      c.globalAlpha = flatA;
+    }
     // 4) Übersicht: Gelände, Städte, Straßen je Feld
     if (ppt >= 3.2) {
       const oA = S.clamp((ppt - 3.2) / 2, 0, 1);
@@ -1375,27 +1387,15 @@
       }
       const home = paths[World.homeIdx - 1];
       if (home) { c.globalAlpha = base; c.lineWidth = 2.2 / sc; c.strokeStyle = '#f0c45a'; c.stroke(home.p); }
-      // eroberte Gebiete
-      const occ = occList(G);
-      if (occ.length) {
-        c.globalAlpha = base * Math.max(0.55, polA + 0.2);
-        for (let i = 0; i < occ.length; i += 3) {
-          const o = occ[i + 2];
-          c.fillStyle = o === World.homeIdx ? '#e8b23a' : (paths[o - 1] ? darken(paths[o - 1].color) : '#777');
-          c.fillRect(occ[i] / WT, occ[i + 1] / WT, 1.05 / WT, 1.05 / WT);
-        }
-      }
       c.restore();
     }
     c.globalAlpha = base;
   }
-  function occList(G) {
-    if (!G.mil) return [];
-    if (R._occVer === R.occVer && R._occList) return R._occList;
-    const out = [];
-    for (const k in G.mil.occ) { const p = k.indexOf(','); out.push(+k.slice(0, p), +k.slice(p + 1), G.mil.occ[k]); }
-    R._occList = out; R._occVer = R.occVer;
-    return out;
+  /** Farbe eines Landes auf Weltkarte und Globus (eigenes Land gold, Rebellen grau) */
+  function terrColor(o) {
+    if (o === World.homeIdx) return '#e8b23a';
+    const p = politicalPaths()[o - 1];
+    return p ? p.color : '#6b6f75';
   }
   const _dk = {};
   function darken(hex) {
@@ -1664,7 +1664,10 @@
     }
     const below = (cx, cy, y0) => {
       let y = y0;
-      for (let i = 0; i < tokens.length; i += 2) if (Math.abs(tokens[i] - cx) < 34 && tokens[i + 1] + 21 > y && tokens[i + 1] - 16 < y + 30) y = tokens[i + 1] + 21;
+      // nur Steine direkt an der Stadt zählen, sonst wandert das Schild an fremden Truppen entlang
+      for (let i = 0; i < tokens.length; i += 2) {
+        if (Math.abs(tokens[i] - cx) < 34 && Math.abs(tokens[i + 1] - cy) < 26 && tokens[i + 1] + 21 > y) y = tokens[i + 1] + 21;
+      }
       return y;
     };
     for (const city of list) {

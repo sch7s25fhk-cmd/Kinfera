@@ -276,6 +276,13 @@
   };
 
   /** Land unter einem globalen Feld (für Infos und später fürs Militär) */
+  /** Ursprüngliche Ländernummern eines Feldblocks (Scanline über die Umrisse) */
+  Wd.ownerBlock = function (gx0, gy0, w, h) {
+    const o = new Uint16Array(w * h);
+    rasterOwner(o, gx0, gy0, w, h);
+    return o;
+  };
+
   Wd.ownerAt = function (gx, gy) {
     const o = new Uint16Array(1);
     rasterOwner(o, Math.floor(gx), Math.floor(gy), 1, 1);

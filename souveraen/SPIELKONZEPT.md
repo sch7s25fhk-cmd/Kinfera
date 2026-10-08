@@ -119,6 +119,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Gefechte** entstehen automatisch, wenn Gegner in Kontakt kommen. Gelände (Berge, Hügel, Wald, Stadt), Heimvorteil und Festungen stärken die Verteidiger; beschädigte Einheiten erholen sich auf eigenem Boden.
 - **Bilder:** Jede Einheit zeigt ihr Bild (Soldat, Panzer, Geschütz) und blickt in Marschrichtung; darunter der Stärkebalken.
 - **Fronten:** Nur **Infanterie** gewinnt Gelände. Steht sie auf feindlichem Boden, wechselt alles im Umkreis von etwa 15 km den Besitzer (ausgewählte Infanterie zeigt den Kreis gestrichelt) – die Grenze wandert mit. Felder, die näher an einer feindlichen Einheit liegen, bleiben beim Gegner: Die Front liegt zwischen den Truppen. Stadtgebiete werden nicht über den Umkreis eingenommen.
+- **Kessel:** Ein Stück Feindesland, das ganz von deinem Gebiet (und Meer) umschlossen ist und in dem keine feindlichen Truppen stehen, fällt dir zu – Stadtgebiete darin bleiben, bis Infanterie ihren Mittelpunkt erreicht. Umgekehrt gilt das auch für eingeschlossenes eigenes Land.
+- **Grenzen auf allen Zoomstufen:** Erobertes Land erscheint auf dem Globus, auf der Weltkarte und in der Landkarte in der Farbe seines neuen Besitzers, mit der neuen Grenzlinie; die alte Grenze verschwindet. Verlorenes eigenes Land wechselt genauso die Farbe.
 - **Städte** sind erobert, sobald Infanterie ihren Mittelpunkt erreicht – Panzer und Artillerie können sie freikämpfen, aber nicht besetzen. Fällt die eigene Hauptstadt, kapituliert die Regierung.
 - **Erobertes Land bebauen:** Erobertes Gebiet wird Teil des eigenen Staatsgebiets. Liegt es außerhalb des bisher verwalteten Kartenausschnitts, wächst dieser automatisch mit (bis etwa 95 000 Felder, damit Simulation und Spielstand handlich bleiben). Dort lässt sich alles bauen: Straßen, Betriebe, Zonen und neue Städte – mit mindestens 6 Feldern Abstand zu bestehenden und eroberten Städten; eroberte Städte bleiben, wie sie sind.
 
@@ -150,6 +152,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
+| `js/territory.js` | Verschobene Grenzen: eroberte und verlorene Gebiete auf Globus und Weltkarte |
 | `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |
 | `js/worldmap.js` | 3D-Globus (Länderwahl und weiteste Zoomstufe im Spiel) |
 | `js/ui.js` | Werkzeuge, Panels, Dialoge, Maus- und Touch-Steuerung |

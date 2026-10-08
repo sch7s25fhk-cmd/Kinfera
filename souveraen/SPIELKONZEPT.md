@@ -114,7 +114,9 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - Truppen werden in **Kasernen** ausgebildet (Stunden bis Tage Spielzeit). **Festungen** verdoppeln fast die Verteidigung auf ihrem Feld.
 - Steuerung: Einheit antippen → „+ Truppen ringsum“ für eine Gruppe → „Marschziel“ → Ziel antippen. Ein Ziel im Nachbarland löst eine Kriegserklärung mit allen Folgen aus.
 - **Gefechte** entstehen automatisch, wenn Gegner in Kontakt kommen. Gelände (Berge, Hügel, Wald, Stadt), Heimvorteil und Festungen stärken die Verteidiger; beschädigte Einheiten erholen sich auf eigenem Boden.
-- **Fronten:** Wo Truppen ungehindert stehen, wechselt das Land den Besitzer – die Grenze wandert. **Städte** fallen, sobald kein Verteidiger mehr in der Nähe ist. Fällt die eigene Hauptstadt, kapituliert die Regierung.
+- **Bilder:** Jede Einheit zeigt ihr Bild (Soldat, Panzer, Geschütz) und blickt in Marschrichtung; darunter der Stärkebalken.
+- **Fronten:** Nur **Infanterie** gewinnt Gelände. Steht sie auf feindlichem Boden, wechselt alles im Umkreis von etwa 15 km den Besitzer (ausgewählte Infanterie zeigt den Kreis gestrichelt) – die Grenze wandert mit. Felder, die näher an einer feindlichen Einheit liegen, bleiben beim Gegner: Die Front liegt zwischen den Truppen. Stadtgebiete werden nicht über den Umkreis eingenommen.
+- **Städte** sind erobert, sobald Infanterie ihren Mittelpunkt erreicht – Panzer und Artillerie können sie freikämpfen, aber nicht besetzen. Fällt die eigene Hauptstadt, kapituliert die Regierung.
 
 ### Gegner
 - Jedes Land stellt eine Armee nach seiner echten Größe auf, mobilisiert anderthalb Tage, hält einen Teil zur Verteidigung zurück und greift mit dem Rest die nächsten Städte an. Nachschub kommt alle zwei Spieltage.

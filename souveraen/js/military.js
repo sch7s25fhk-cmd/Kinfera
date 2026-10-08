@@ -117,7 +117,7 @@
     else if (biome === B.HILLS) d = 1.4;
     else if (biome === B.FOREST || biome === B.JUNGLE || biome === B.TAIGA) d = 1.25;
     else if (biome === B.SWAMP) d = 1.2;
-    return d * (urban ? 1.5 : 1);
+    return d * (urban ? 1.3 : 1);
   }
   M.terrainDef = terrainDef;
 
@@ -263,7 +263,8 @@
       best.under = true;
       const tgtT = M.TYPES[best.type];
       let def = tgtT.def * terrainDef(G, best.x, best.y);
-      if (M.owner(G, best.x, best.y) === (best.o === -1 ? best.orig : best.o)) def *= 1.2; // Heimvorteil
+      if (M.owner(G, best.x, best.y) === (best.o === -1 ? best.orig : best.o)) def *= 1.1; // Heimvorteil
+      def = Math.pow(def, 0.8); // Boni wirken, ohne Angriffe aussichtslos zu machen
       const dmg = T.atk * Math.pow(Math.max(0, u.hp) / 100, 0.7) * 7.5 * h * (0.7 + rnd() * 0.6) / def;
       best.hp -= dmg;
       const men = dmg / 100 * tgtT.men;
@@ -300,12 +301,13 @@
       if (no !== u.o && !M.atWar(G, u.o, no)) { u.path = null; continue; } // Grenze zu neutralem Land
       u.x = nx; u.y = ny;
     }
-    // 4) Eroberung
+    // 4) Gebietsgewinn – nur Infanterie nimmt Land ein (sobald sie sich bewegt oder regelmäßig im Stand)
     for (const u of units) {
-      if (u.ready > now || u.fight || u.under) continue;
+      if (u.ready > now || u.type !== 'inf') continue;
       u.capAcc += h;
-      if (u.capAcc < 0.5) continue;
-      u.capAcc = 0;
+      const moved = u.lcx === undefined || Math.hypot(u.x - u.lcx, u.y - u.lcy) >= 0.35;
+      if (!moved && u.capAcc < 0.25) continue;
+      u.capAcc = 0; u.lcx = u.x; u.lcy = u.y;
       capture(G, u);
     }
     // 5) KI
@@ -313,41 +315,57 @@
     if (mil.aiAcc >= 1) { mil.aiAcc = 0; ai(G); }
   }
 
+  /** Kontrollradius einer Infanterie in Feldern (etwa 15 km) */
+  M.captureRadius = (u) => S.clamp(15 / M.kmAt(u.y), 1, 6);
+
+  /** Alles feindliche Land im Radius der Einheit einnehmen – außer Feldern, die näher an einem Gegner liegen (Frontlinie) */
   function capture(G, u) {
-    const home = M.home();
-    const o = M.owner(G, u.x, u.y);
-    if (!o || o === u.o) { cityCapture(G, u); return; }
-    if (!M.atWar(G, u.o, o) && u.o !== -1) return;
-    const target = o;
-    const km = M.kmAt(u.y);
-    const R = S.clamp(Math.round(10 / km), 1, 4);
-    const newOwner = u.o === -1 ? (u.orig || o) : u.o;
-    let n = 0;
-    for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) {
-      if (ox * ox + oy * oy > R * R + 0.5) continue;
-      const gx = Math.floor(u.x) + ox, gy = Math.floor(u.y) + oy;
-      if (M.owner(G, gx, gy) !== target) continue;
-      M.setOwner(G, gx, gy, newOwner); n++;
+    const home = M.home(), mil = G.mil, now = mil.hours;
+    const mine = u.o === -1 ? u.orig : u.o;
+    const R = M.captureRadius(u), Ri = Math.ceil(R);
+    const foes = mil.units.filter(v => v.ready <= now && M.atWar(G, u.o, v.o) && Math.abs(v.x - u.x) < R * 2 + 2 && Math.abs(v.y - u.y) < R * 2 + 2);
+    const cx = Math.floor(u.x), cy = Math.floor(u.y);
+    const gained = {};
+    // Stadtgebiete fallen nur über ihren Mittelpunkt (cityCapture)
+    const cityList = W().citiesNear(cx - Ri - 3, cy - Ri - 3, 2 * Ri + 7, 2 * Ri + 7);
+    const inCity = (gx, gy, o) => {
+      const [lx, ly] = local(G, gx, gy);
+      if (lx >= 0 && ly >= 0 && lx < G.W && ly < G.H && G.t.city[ly * G.W + lx] && S.isUrban(G.t.bld[ly * G.W + lx])) return true;
+      return cityList.some(n => n.c.ci === o && Math.hypot(gx + 0.5 - n.gx, gy + 0.5 - n.gy) <= n.c.r + 0.5);
+    };
+    for (let oy = -Ri; oy <= Ri; oy++) for (let ox = -Ri; ox <= Ri; ox++) {
+      const gx = cx + ox, gy = cy + oy;
+      const d = Math.hypot(gx + 0.5 - u.x, gy + 0.5 - u.y);
+      if (d > R) continue;
+      const o = M.owner(G, gx, gy);
+      if (!o || o === mine || !M.atWar(G, u.o, o)) continue;
+      if (foes.some(v => Math.hypot(gx + 0.5 - v.x, gy + 0.5 - v.y) < d)) continue;
+      if (inCity(gx, gy, o)) continue;
+      M.setOwner(G, gx, gy, mine);
+      gained[o] = (gained[o] || 0) + 1;
     }
-    const war = G.mil.wars[u.o === home ? o : u.o];
-    if (war) war.score += (u.o === home ? 1 : -1) * n * 0.04;
+    for (const o in gained) {
+      const war = mil.wars[u.o === home ? o : u.o];
+      if (war) war.score += (u.o === home ? 1 : -1) * gained[o] * 0.04;
+    }
     cityCapture(G, u);
   }
 
-  /** Stadt einnehmen, wenn keine Verteidiger mehr in der Nähe sind */
+  /** Stadt einnehmen: Infanterie hat den Stadtmittelpunkt erreicht */
   function cityCapture(G, u) {
     const home = M.home(), mil = G.mil;
     // fremde Städte
     const near = W().citiesNear(Math.floor(u.x) - 3, Math.floor(u.y) - 3, 6, 6);
     for (const n of near) {
-      if (Math.hypot(u.x - n.gx, u.y - n.gy) > n.c.r + 0.6) continue;
+      if (Math.floor(u.x) !== Math.floor(n.gx) || Math.floor(u.y) !== Math.floor(n.gy)) {
+        if (Math.hypot(u.x - n.gx, u.y - n.gy) > 0.8) continue;
+      }
       // Städte des eigenen Landes laufen über G.cities (unten)
       if (n.c.cid === G.meta.id && G.cities.some(c => Math.hypot(c.x + G.gx0 + 0.5 - n.gx, c.y + G.gy0 + 0.5 - n.gy) < 4)) continue;
       const cur = M.owner(G, n.gx, n.gy);
       const mine = u.o === -1 ? u.orig : u.o;
       if (cur === mine || !cur) continue;
       if (!M.atWar(G, u.o, cur)) continue;
-      if (mil.units.some(v => v.o === cur && Math.hypot(v.x - n.gx, v.y - n.gy) < 2.5)) continue;
       const R = Math.ceil(n.c.r + 1);
       for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) {
         const gx = Math.floor(n.gx) + ox, gy = Math.floor(n.gy) + oy;
@@ -368,7 +386,8 @@
     // eigene Städte
     for (const c of G.cities) {
       const gx = c.x + G.gx0 + 0.5, gy = c.y + G.gy0 + 0.5;
-      if (Math.hypot(u.x - gx, u.y - gy) > 2.2) continue;
+      // nur wer das Rathaus erreicht, nimmt die Stadt
+      if (Math.hypot(u.x - gx, u.y - gy) > 0.8) continue;
       if (u.o === home) {
         // Rückeroberung
         if (G.t.owner[c.y * G.W + c.x] !== home) {
@@ -379,7 +398,6 @@
         continue;
       }
       if (G.t.owner[c.y * G.W + c.x] !== home) continue;
-      if (mil.units.some(v => v.o === home && v.ready <= mil.hours && Math.hypot(v.x - gx, v.y - gy) < 2.5)) continue;
       // Stadt fällt
       const R = Math.ceil(Math.sqrt(c.tiles + 1) * 0.9) + 2;
       for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) {

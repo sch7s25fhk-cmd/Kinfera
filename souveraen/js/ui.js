@@ -832,13 +832,9 @@
     cv.width = 68; cv.height = 68;
     const c = cv.getContext('2d');
     c.scale(2, 2);
-    c.fillStyle = R.unitColor(u.o); c.fillRect(3, 7, 28, 19);
-    const ink = myUnit(u) ? '#1b2531' : '#fff';
-    c.strokeStyle = ink; c.lineWidth = 1.4; c.strokeRect(6, 10, 22, 13);
-    c.beginPath();
-    if (u.type === 'inf') { c.moveTo(6, 10); c.lineTo(28, 23); c.moveTo(28, 10); c.lineTo(6, 23); c.stroke(); }
-    else if (u.type === 'tank') { c.ellipse(17, 16.5, 7, 3.5, 0, 0, Math.PI * 2); c.stroke(); }
-    else { c.fillStyle = ink; c.arc(17, 16.5, 2.8, 0, Math.PI * 2); c.fill(); }
+    const col = R.unitColor(u.o);
+    c.fillStyle = col; c.beginPath(); c.roundRect ? c.roundRect(0, 4, 34, 26, 6) : c.rect(0, 4, 34, 26); c.fill();
+    S.drawUnitPic(c, u.type, 17, 16.5, 28, myUnit(u) ? '#1b2531' : '#fff', col, 1);
     return cv;
   }
 
@@ -1216,7 +1212,7 @@
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
       '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen, doppelt tippen zoomt hinein. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
-      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen; wo sie vorrücken, verschiebt sich die Grenze. Städte fallen, wenn kein Verteidiger mehr in der Nähe ist. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
+      '<p><b>Militär.</b> Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });

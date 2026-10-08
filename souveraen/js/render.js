@@ -1301,9 +1301,9 @@
         c.fillText('!', sx, sy - 3.5);
       }
     }
-    if (G.mil && ppt >= 0.5) drawUnits(c, G, time);
     if (ppt < 7) drawCountryNames(c, G, ppt);
     if (ppt >= 2.2) { drawForeignLabels(c, G, ppt, gA, gB, hA, hB); drawLabels(c, G); }
+    if (G.mil && ppt >= 0.5) { c.globalAlpha = R.flatA; c.textBaseline = 'alphabetic'; drawUnits(c, G, time); }
     c.globalAlpha = 1;
   };
 
@@ -1406,6 +1406,69 @@
     return best;
   };
 
+  /**
+   * Bild einer Einheit (Seitenansicht, Blick nach rechts; face = -1 spiegelt).
+   * s = Breite in Pixeln, ink = Zeichenfarbe, bg = Grundfarbe des Spielsteins.
+   */
+  S.drawUnitPic = function (c, type, cx, cy, s, ink, bg, face) {
+    c.save();
+    c.translate(cx, cy);
+    c.scale((face < 0 ? -1 : 1) * s / 24, s / 24);
+    c.fillStyle = ink; c.strokeStyle = ink;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    if (type === 'inf') {
+      // Soldat mit Helm und Gewehr
+      c.lineWidth = 1.7;
+      c.beginPath(); c.moveTo(-0.2, 2.6); c.lineTo(-2.6, 7.4); c.moveTo(0.8, 2.6); c.lineTo(2.9, 7.4); c.stroke();  // Beine
+      c.beginPath(); c.moveTo(-3.6, 7.4); c.lineTo(-1.8, 7.4); c.moveTo(2.5, 7.4); c.lineTo(4.2, 7.4); c.stroke();  // Stiefel
+      roundRect(c, -1.9, -2.2, 3.8, 5.3, 1.2); c.fill();                                                          // Rumpf
+      c.beginPath(); c.arc(0.3, -3.7, 1.55, 0, Math.PI * 2); c.fill();                                              // Kopf
+      c.beginPath(); c.arc(0.1, -4.6, 2.5, Math.PI, 0); c.closePath(); c.fill();                                    // Helm
+      c.lineWidth = 1; c.beginPath(); c.moveTo(-2.9, -4.5); c.lineTo(3.1, -4.5); c.stroke();                        // Helmrand
+      c.lineWidth = 1.3; c.beginPath(); c.moveTo(-3.2, 2.8); c.lineTo(7.2, -3.6); c.stroke();                       // Gewehr
+      c.lineWidth = 2; c.beginPath(); c.moveTo(-3.4, 3); c.lineTo(-1.6, 1.9); c.stroke();                           // Kolben
+      c.lineWidth = 1.2; c.beginPath(); c.moveTo(0.6, -1.2); c.lineTo(2.6, 0.6); c.stroke();                        // Arm
+    } else if (type === 'tank') {
+      // Panzer: Ketten mit Laufrollen, Wanne, Turm, Kanone
+      roundRect(c, -10.5, 1.2, 21, 5.6, 2.8); c.fill();
+      c.fillStyle = bg;
+      for (let i = -2; i <= 2; i++) { c.beginPath(); c.arc(i * 3.9, 4, 1.35, 0, Math.PI * 2); c.fill(); }
+      c.fillStyle = ink;
+      c.beginPath(); c.moveTo(-10.5, 1.6); c.lineTo(-9.4, -1.6); c.lineTo(8.6, -1.6); c.lineTo(11.2, 1.6); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(-5.5, -1.6); c.lineTo(-4.4, -5.4); c.lineTo(2.6, -5.4); c.lineTo(4.6, -1.6); c.closePath(); c.fill();
+      c.fillRect(3, -4.4, 9.4, 1.5);
+      c.fillRect(11.4, -4.7, 1.4, 2.1);
+    } else {
+      // Artillerie: Feldgeschütz mit Lafette, Rad und langem Rohr
+      c.lineWidth = 1.9;
+      c.beginPath(); c.moveTo(0, 3.2); c.lineTo(-11, 7.2); c.stroke();                                              // Lafette
+      c.lineWidth = 1.4; c.beginPath(); c.moveTo(-11.4, 5.6); c.lineTo(-10.6, 8.4); c.stroke();                     // Sporn
+      c.save(); c.translate(0, 0.6); c.rotate(-0.5);
+      c.fillRect(-4, -1.3, 4.6, 2.6);                                                                               // Verschluss
+      c.fillRect(0, -0.85, 13, 1.7);                                                                                // Rohr
+      c.fillRect(12, -1.2, 1.6, 2.4);                                                                               // Mündung
+      c.restore();
+      c.beginPath(); c.moveTo(-1.6, -2.4); c.lineTo(2.2, -4.2); c.lineTo(3, 1.6); c.lineTo(-1, 2.2); c.closePath(); c.fill(); // Schild
+      c.fillStyle = bg; c.beginPath(); c.arc(0.4, 4.2, 3.7, 0, Math.PI * 2); c.fill();
+      c.lineWidth = 1.5; c.beginPath(); c.arc(0.4, 4.2, 3.5, 0, Math.PI * 2); c.stroke();                          // Rad
+      c.lineWidth = 0.8; c.beginPath();
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; c.moveTo(0.4 + Math.cos(a) * 3.3, 4.2 + Math.sin(a) * 3.3); c.lineTo(0.4 - Math.cos(a) * 3.3, 4.2 - Math.sin(a) * 3.3); }
+      c.stroke();
+      c.fillStyle = ink; c.beginPath(); c.arc(0.4, 4.2, 1, 0, Math.PI * 2); c.fill();                              // Nabe
+    }
+    c.restore();
+  };
+
+  /** Blickrichtung einer Einheit: Marschrichtung, sonst zum Gegner, sonst die letzte */
+  function unitFace(u, byId) {
+    let dx = 0;
+    if (u.path && u.path.length) dx = u.path[0][0] - u.x;
+    else if (u.fight && byId && byId.get(u.fight)) dx = byId.get(u.fight).x - u.x;
+    if (Math.abs(dx) > 0.05) u.face = dx < 0 ? -1 : 1;
+    return u.face || 1;
+  }
+  R.unitFace = unitFace;
+
   function drawUnits(c, G, time) {
     const T = (time || 0) / 1000, home = World.homeIdx, now = G.mil.hours;
     const sel = new Set(R.selUnits || []);
@@ -1433,33 +1496,42 @@
       c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + (x1 - x0) * ph, y0 + (y1 - y0) * ph); c.stroke();
       if (ph > 0.75) { c.fillStyle = 'rgba(255,200,80,0.9)'; c.beginPath(); c.arc(x1 + (Math.sin(u.id + T * 7) * 5), y1 + Math.cos(u.id + T * 5) * 5, 3 + (ph - 0.75) * 16, 0, Math.PI * 2); c.fill(); }
     }
+    // Einnahmeradius ausgewählter Infanterie
+    const tpx = TS * R.cam.z;
+    c.setLineDash([4, 4]); c.lineWidth = 1.4;
+    for (const u of G.mil.units) {
+      if (u.o !== home || u.type !== 'inf' || !sel.has(u.id)) continue;
+      const [x, y] = R.gToScreen(u.x, u.y);
+      const r = S.Mil.captureRadius(u) * tpx;
+      if (r < 20 || r > Math.max(R.cw, R.ch) * 2) continue;
+      c.fillStyle = 'rgba(227,173,60,0.10)'; c.strokeStyle = 'rgba(227,173,60,0.85)';
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    c.setLineDash([]);
     // Spielsteine (eigene zuletzt, damit sie oben liegen)
     const list = G.mil.units.slice().sort((a, b) => (a.o === home) - (b.o === home));
     for (const u of list) {
       const [x, y] = R.gToScreen(u.x, u.y);
       if (x < -30 || y < -30 || x > R.cw + 30 || y > R.ch + 30) continue;
-      const w = 28, h = 19;
+      const w = 34, h = 25;
       const training = u.ready > now;
       c.globalAlpha = (training ? 0.55 : 1) * R.flatA;
       if (u.fight || u.under) {
         c.fillStyle = 'rgba(230,60,40,' + (0.35 + 0.3 * Math.sin(T * 8)).toFixed(2) + ')';
-        c.beginPath(); c.arc(x, y, 19, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(x, y, 23, 0, Math.PI * 2); c.fill();
       }
-      c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(x - w / 2 + 2, y - h / 2 + 2, w, h);
-      c.fillStyle = R.unitColor(u.o);
-      c.fillRect(x - w / 2, y - h / 2, w, h);
+      const col = R.unitColor(u.o);
+      c.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(c, x - w / 2 + 2, y - h / 2 + 2, w, h, 6); c.fill();
+      c.fillStyle = col; roundRect(c, x - w / 2, y - h / 2, w, h, 6); c.fill();
       const ink = u.o === home ? '#1b2531' : '#ffffff';
-      c.strokeStyle = ink; c.lineWidth = 1.4;
-      c.strokeRect(x - w / 2 + 3, y - h / 2 + 3, w - 6, h - 6);
-      c.beginPath();
-      if (u.type === 'inf') { c.moveTo(x - w / 2 + 3, y - h / 2 + 3); c.lineTo(x + w / 2 - 3, y + h / 2 - 3); c.moveTo(x + w / 2 - 3, y - h / 2 + 3); c.lineTo(x - w / 2 + 3, y + h / 2 - 3); c.stroke(); }
-      else if (u.type === 'tank') { c.ellipse(x, y, w / 2 - 7, h / 2 - 6, 0, 0, Math.PI * 2); c.stroke(); }
-      else { c.fillStyle = ink; c.arc(x, y, 2.8, 0, Math.PI * 2); c.fill(); }
+      c.strokeStyle = u.o === home ? 'rgba(27,37,49,0.55)' : 'rgba(255,255,255,0.5)'; c.lineWidth = 1;
+      roundRect(c, x - w / 2 + 0.5, y - h / 2 + 0.5, w - 1, h - 1, 6); c.stroke();
+      S.drawUnitPic(c, u.type, x, y - 0.5, 27, ink, col, unitFace(u, byId));
       // Stärke
-      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, y + h / 2 + 1, w, 4);
+      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, y + h / 2 + 2, w, 4);
       c.fillStyle = u.hp > 60 ? '#5fbf7f' : u.hp > 30 ? '#f0b23a' : '#e5574e';
-      c.fillRect(x - w / 2, y + h / 2 + 1, w * Math.max(0, u.hp) / 100, 4);
-      if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.strokeRect(x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 12); }
+      c.fillRect(x - w / 2, y + h / 2 + 2, w * Math.max(0, u.hp) / 100, 4);
+      if (sel.has(u.id)) { c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; roundRect(c, x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 12, 8); c.stroke(); }
       if (training) { c.fillStyle = '#fff'; c.font = '600 9px "Public Sans", system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('Ausbildung', x, y - h / 2 - 6); }
     }
     c.globalAlpha = R.flatA;

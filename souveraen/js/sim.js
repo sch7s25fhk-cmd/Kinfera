@@ -63,6 +63,7 @@
       // zwei erste Häuser
       for (let k = 0; k < 2; k++) S.growStep(G, city, Math.random, 'R');
       city.pop = 120;
+      S.recalcCities(G);   // Wohnraum sofort bekannt, nicht erst zum Monatsende
     }
     G._netDirty = true;
     return city;
@@ -836,29 +837,40 @@
     const energyOk = L.energyRatio === undefined || L.energyRatio > 0.85;
     const natMul = S.lawv(G, 'family', 'natural', 1), lawMigr = S.lawv(G, 'immigration', 'migr', 0), build = S.lawv(G, 'housing', 'build', 1);
     const rnd = Math.random;
+    let built = false;
     for (const c of G.cities) {
       if (!c.cap && !c.tiles) continue;
       const attract = (c.happy - 55) / 45 + (employment - 0.92) * 3 + (c.connected ? 0.1 : -0.4) + (c.rail ? 0.15 : 0) + Math.min(1, c.airport || 0) * 0.15;
       const natural = (0.0009 + 0.0009 * (c.health || 0.6)) * natMul - Math.min(1, foodShort) * 0.01;
       const young = c.isNew && G.month - c.founded < 48 && c.happy > 40 ? 0.06 : 0;
-      const migr = 0.007 * S.clamp(attract, -1.5, 1.5) + S.mod(G, 'immig') + lawMigr * (attract > -0.3 ? 1 : 0.3) + young;
+      // freie Wohnungen ziehen Menschen an, solange die Stadt nicht unbeliebt ist
+      const vacancy = c.cap > 0 ? S.clamp(1 - c.pop / c.cap, 0, 1) : 0;
+      const settle = c.isNew && G.month - c.founded < 60 && c.happy > 45 && attract > -0.6 ? 0.02 * vacancy : 0;
+      const migr = 0.007 * S.clamp(attract, -1.5, 1.5) + S.mod(G, 'immig') + lawMigr * (attract > -0.3 ? 1 : 0.3) + young + settle;
       c.growth = natural + migr;
       c.attract = attract;
       c.pop = Math.max(50, c.pop * (1 + c.growth * frac));
-      if (c.pop > c.cap * 1.06) c.pop -= (c.pop - c.cap * 1.06) * Math.min(1, 0.03 * frac * 30);
+      // Überbelegung baut sich ab (Wegzug), aber nur gegen bekannten Wohnraum
+      if (c.cap > 0 && c.pop > c.cap * 1.06) c.pop -= (c.pop - c.cap * 1.06) * Math.min(1, 0.03 * frac * 30);
       // Bauen: bei Wohnungsmangel sowieso, bei guten Aussichten auch vorausschauend
       const avgCap = c.cap / Math.max(1, c.nR) || 300;
       let perMonth = 0;
       const free = c.cap * 0.88 - c.pop;
       if (free < 0 && c.happy > 25) perMonth += Math.min(3, -free / avgCap) * 2;
       if (attract > 0.1 && energyOk && c.happy > 45) perMonth += 1.8 * Math.min(1.2, attract) * (0.6 + Math.sqrt(c.tiles || 1) / 12) * build;
+      // junge Städte: Siedler bauen auch ohne Anbindung ihre ersten Häuser
+      if (c.isNew && G.month - c.founded < 48 && c.happy > 40 && c.pop > c.cap * 0.6) perMonth = Math.max(perMonth, 0.8 * build);
+      // bei viel Leerstand baut niemand vorausschauend weiter
+      if (c.pop < c.cap * 0.5 && free > 0) perMonth = Math.min(perMonth, 0.2);
       c.buildRate = perMonth;
       let steps = perMonth * frac;
       while (steps > 0) {
-        if (steps >= 1 || rnd() < steps) S.growStep(G, c, rnd);
+        if (steps >= 1 || rnd() < steps) { S.growStep(G, c, rnd); built = true; }
         steps -= 1;
       }
     }
+    // neue Häuser zählen sofort zum Wohnraum
+    if (built) S.recalcCities(G);
   };
 
   /** Bringt den Startzustand ins Gleichgewicht: Strom, Arbeitsplätze und Haushalt */

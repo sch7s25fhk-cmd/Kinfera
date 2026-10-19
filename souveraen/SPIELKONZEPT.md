@@ -100,7 +100,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 
 ### Grafik
 - **Echte Figuren statt Spielsteine:** Infanterie ist ein Soldat mit Helm, Uniform, Gewehr und Rucksack, der beim Marschieren läuft und im Gefecht anlegt; Panzer mit Ketten, Laufrollen, Turm, Tarnanstrich und Hoheitszeichen; Geschütze mit Rädern, Schild, Lafette und Kanonier. Uniformen tragen realistische Farben (Oliv, Feldgrau, Khaki, Sand …), die Zugehörigkeit zeigt ein Ring am Boden in Landesfarbe. Nah beieinander stehende Truppen weichen auf dem Bildschirm zu einer Formation aus. Neue Einheitentypen tragen sich in `js/sprites.js` ein.
-- **Landschaft wie aus der Luft:** natürliche Farben, Äcker als Flickenteppich in wechselnder Ausrichtung, Kronendach im Wald, Fels und weiche Schneegrenzen im Gebirge, Dünen, Wasser von türkisem Flachwasser bis tiefblauer See, Relief mit Licht aus Nordwesten. Bäume sind schattierte Kronen mit Schlagschatten; Gebäude werfen Schatten nach Südosten, Straßen sind Asphalt, Wohnviertel haben Gärten und Grünstreifen.
+- **Satellitenbild statt Pixelgrafik:** Die ganze Karte ist eine Draufsicht wie aus dem All. Gebäude sind Dächer von oben (Satteldächer mit First, Flachdächer mit Aufbauten, Glasdächer) und werfen Schatten nach Südosten; je höher, desto länger. Bäume sind Kronen von oben mit Schlagschatten, Kühltürme, Stadien und Windräder sind von oben gezeichnet. Das Gelände wird kubisch interpoliert und leicht verwirbelt abgetastet, damit Küsten, Seen und Waldränder natürlich verlaufen statt dem Feldraster zu folgen; Felder sind kleine Parzellen, eine feine Bodenstruktur macht die Nahansicht scharf. In der Übersicht erscheinen Städte als Flächen mit vielen kleinen Dächern statt als Kacheln.
+- **Die Erde aus dem All:** Globus und Weltkarte zeigen eine gemeinsame Satellitentextur (`js/satellite.js`) mit weichen Küsten, Flachwasser, Meerestiefe, Klimazonen, Wüsten, Wäldern und Packeis. Länder sind nur noch fein umrandet und leicht getönt; das eigene Land und die Auswahl heben sich gold ab.
 - **Gefechte** sind sichtbar: Infanterie feuert Leuchtspurgarben, Panzer schießen mit Mündungsfeuer und Einschlag, Artillerie schickt Granaten im Bogen mit Explosion und Druckwelle. Vernichtete Einheiten hinterlassen ein brennendes Wrack mit Rauchsäule.
 - **Frontlinien** zwischen dir und Kriegsgegnern glühen rot und laufen sichtbar entlang der Grenze.
 - **Einheiten** werfen Schatten, wippen auf dem Marsch und zeigen Sterne, Stellung, fehlenden Nachschub und Rückzug.
@@ -181,6 +182,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
+| `js/satellite.js` | Satellitentextur der Erde für Globus und Weltkarte |
 | `js/sprites.js` | Einheiten als Figuren (Soldat, Panzer, Geschütz) – vorgezeichnet, gespiegelt, zwischengespeichert |
 | `js/effects.js` | Gefechtseffekte (Leuchtspur, Granaten, Explosionen, Wracks), Frontlinien, Wolken, Abzeichen der Einheiten |
 | `js/territory.js` | Verschobene Grenzen: eroberte und verlorene Gebiete auf Globus und Weltkarte |

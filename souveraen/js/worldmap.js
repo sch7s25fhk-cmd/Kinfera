@@ -175,6 +175,54 @@
     if (WM.lon > 180) WM.lon -= 360; if (WM.lon < -180) WM.lon += 360;
   }
 
+  // ---------- Satellitenkugel ----------
+  let sphere = null;
+  /**
+   * Kugel Pixel für Pixel aus der Mercator-Textur abtasten. Das Ergebnis wird zwischengespeichert;
+   * während sich die Ansicht bewegt, in geringerer Auflösung.
+   */
+  function texturedSphere(c, tex, cx, cy, R, m) {
+    const key = WM.lon.toFixed(2) + ',' + WM.lat.toFixed(2) + ',' + Math.round(R);
+    const moving = !sphere || sphere.key !== key;
+    const still = sphere && sphere.lastKey === key;
+    const maxS = Math.round(Math.min(2 * R * WM.dpr, 640));
+    const Sz = Math.max(64, Math.min(maxS, still ? maxS : 300));
+    if (moving || (still && sphere.size < Sz)) {
+      const cv = (sphere && sphere.cv && sphere.cv.width === Sz) ? sphere.cv : document.createElement('canvas');
+      cv.width = cv.height = Sz;
+      const g = cv.getContext('2d'), img = g.createImageData(Sz, Sz), d = img.data;
+      const N = tex.N, T = tex.data, TWO_PI = Math.PI * 2;
+      for (let j = 0; j < Sz; j++) {
+        const u = 1 - (j + 0.5) / Sz * 2;
+        for (let i = 0; i < Sz; i++) {
+          const r = (i + 0.5) / Sz * 2 - 1, q = r * r + u * u;
+          if (q > 1) continue;
+          const dd = Math.sqrt(1 - q);
+          const x = m[0] * r + m[3] * u + m[6] * dd, y = m[1] * r + m[4] * u + m[7] * dd, z = m[2] * r + m[5] * u + m[8] * dd;
+          const lon = Math.atan2(y, x), lat = Math.asin(z > 1 ? 1 : z < -1 ? -1 : z);
+          const la = Math.max(-1.4844, Math.min(1.4844, lat));
+          const o = (j * Sz + i) * 4;
+          // polare Kappen jenseits der Textur
+          if (Math.abs(lat) > 1.4844) { d[o] = 228; d[o + 1] = 234; d[o + 2] = 240; d[o + 3] = 255; continue; }
+          // weich (bilinear) abtasten, damit die Textur aus der Nähe nicht pixelig wirkt
+          const fu = (lon / TWO_PI + 0.5) * N - 0.5, fv = Math.max(0, Math.min(N - 1.001, (Math.PI - Math.log(Math.tan(Math.PI / 4 + la / 2))) / TWO_PI * N - 0.5));
+          const u0 = Math.floor(fu), v0 = Math.floor(fv), au = fu - u0, av = fv - v0;
+          const x0 = ((u0 % N) + N) % N, x1 = (x0 + 1) % N, y1 = Math.min(N - 1, v0 + 1);
+          const s00 = (v0 * N + x0) * 4, s10 = (v0 * N + x1) * 4, s01 = (y1 * N + x0) * 4, s11 = (y1 * N + x1) * 4;
+          const w00 = (1 - au) * (1 - av), w10 = au * (1 - av), w01 = (1 - au) * av, w11 = au * av;
+          d[o] = T[s00] * w00 + T[s10] * w10 + T[s01] * w01 + T[s11] * w11;
+          d[o + 1] = T[s00 + 1] * w00 + T[s10 + 1] * w10 + T[s01 + 1] * w01 + T[s11 + 1] * w11;
+          d[o + 2] = T[s00 + 2] * w00 + T[s10 + 2] * w10 + T[s01 + 2] * w01 + T[s11 + 2] * w11;
+          d[o + 3] = 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+      sphere = { key, cv, size: Sz, lastKey: key };
+    } else sphere.lastKey = key;
+    c.imageSmoothingEnabled = true;
+    c.drawImage(sphere.cv, cx - R, cy - R, R * 2, R * 2);
+  }
+
   // ---------- Zeichnen ----------
   let lastT = 0;
   WM.draw = function (now) {
@@ -244,12 +292,27 @@
       }
       if (any) visible.push([it, path, d]);
     }
-    for (const [it, path] of visible) {
-      c.fillStyle = it === WM.sel ? '#e8b23a' : it === WM.hover ? '#efe3c4' : it.color;
-      c.fill(path);
+    const tex = opts.texture ? opts.texture() : null;
+    if (tex) {
+      // Satellitenbild auf der Kugel, Länder nur als feine Grenzen, Auswahl leicht getönt
+      texturedSphere(c, tex, cx, cy, R, m);
+      for (const [it, path] of visible) {
+        if (it !== WM.sel && it !== WM.hover) continue;
+        c.globalAlpha = it === WM.sel ? 0.32 : 0.2;
+        c.fillStyle = it === WM.sel ? '#e8b23a' : '#fff6dc';
+        c.fill(path);
+        c.globalAlpha = 1;
+      }
+      c.strokeStyle = 'rgba(250,245,232,0.55)'; c.lineWidth = Math.min(1, 0.4 + WM.zoom * 0.06);
+      for (const [, path] of visible) c.stroke(path);
+    } else {
+      for (const [it, path] of visible) {
+        c.fillStyle = it === WM.sel ? '#e8b23a' : it === WM.hover ? '#efe3c4' : it.color;
+        c.fill(path);
+      }
+      c.strokeStyle = 'rgba(30,40,50,0.5)'; c.lineWidth = Math.min(1.2, 0.5 + WM.zoom * 0.08);
+      for (const [, path] of visible) c.stroke(path);
     }
-    c.strokeStyle = 'rgba(30,40,50,0.5)'; c.lineWidth = Math.min(1.2, 0.5 + WM.zoom * 0.08);
-    for (const [, path] of visible) c.stroke(path);
     if (WM.sel) {
       const v = visible.find(x => x[0] === WM.sel);
       if (v) { c.strokeStyle = '#fff6dc'; c.lineWidth = 2; c.stroke(v[1]); }
@@ -402,7 +465,7 @@
   return WM;
   };
 
-  const WM = S.WM = S.makeGlobe();
+  const WM = S.WM = S.makeGlobe({ texture: () => (S.Sat ? S.Sat.get() : null) });
 
   /** Kleine Umriss-Vorschau eines Landes für die Infokarte */
   WM.shapePreview = function (canvas, item) {

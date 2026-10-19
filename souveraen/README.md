@@ -1,6 +1,6 @@
 # Souverän
 
-Eine Staats- und Aufbausimulation fürs Handy (Hochformat, Touch): Wähle ein echtes Land von der Weltkarte, regiere es, baue Infrastruktur und Wirtschaft auf, forme die Landschaft und lass Städte in deinem Stil wachsen.
+Eine Staats- und Aufbausimulation fürs Handy (Hochformat, Touch) mit einer Karte im Satellitenbild-Stil: Wähle ein echtes Land von der Weltkarte, regiere es, baue Infrastruktur und Wirtschaft auf, forme die Landschaft und lass Städte in deinem Stil wachsen.
 
 Das vollständige Spielkonzept steht in [SPIELKONZEPT.md](SPIELKONZEPT.md).
 

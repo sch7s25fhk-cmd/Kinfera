@@ -33,6 +33,7 @@
   };
 
   // ---------------- Grobes Weltraster (0,5°) für Küstenabstände ----------------
+  Wd.ensureCoarse = () => ensureCoarse();
   const CR = 0.5, CW = 720, CHh = 340; // Breiten 85 … -85
   function ensureCoarse() {
     if (Wd.coarse) return;

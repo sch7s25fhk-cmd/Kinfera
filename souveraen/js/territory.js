@@ -244,7 +244,7 @@
         c.drawImage(image(p, polA, colorOf), p.x0 - 1, p.y0 - 1, p.iw, p.ih);
         const pa = lines(p);
         c.lineCap = 'round';
-        c.globalAlpha = lineA; c.lineWidth = 1 / (z * TS); c.strokeStyle = 'rgba(30,40,50,0.9)';
+        c.globalAlpha = lineA; c.lineWidth = 1 / (z * TS); c.strokeStyle = 'rgba(245,240,225,0.8)';
         c.stroke(pa.other);
         c.globalAlpha = base; c.lineWidth = 2.2 / (z * TS); c.strokeStyle = '#f0c45a';
         c.stroke(pa.home);

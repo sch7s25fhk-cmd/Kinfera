@@ -685,16 +685,36 @@
   function bindMap() {
     const cv = $('mapCanvas');
     const ptrs = new Map();
-    let mode = null; // pan | pinch | paint | tap | dzoom (doppelt tippen und ziehen) | done
+    let mode = null; // pan | pinch | paint | tap | move (Bauplatz verschieben) | dzoom (doppelt tippen und ziehen) | done
+    // Bauplatz, der sich mit dem Finger greifen lässt: [Schlüssel in UI.pending, Feld]
+    const grabbable = () => {
+      const p = UI.pending, tool = S.TOOLS[UI.tool];
+      if (!p || tool.kind === 'inspect' || PAINT(tool)) return null;
+      if (p.at) return ['at', p.at];
+      if (p.end) return ['end', p.end];
+      if (p.start) return ['start', p.start];
+      return null;
+    };
+    const siteTool = () => { const t = S.TOOLS[UI.tool]; return t.kind !== 'inspect' && !PAINT(t); };
+    const moveSite = (key, tx, ty) => {
+      const p = UI.pending, cur = p[key];
+      if (cur[0] === tx && cur[1] === ty) return;
+      p[key] = [tx, ty];
+      if (key === 'end') p.path = linePreview(p.start[0], p.start[1], tx, ty);
+      if (key === 'start' && p.end) p.path = linePreview(tx, ty, p.end[0], p.end[1]);
+      vibrate(4);
+      syncPreview();
+    };
     let st = null, lastTap = null;
     const tileAt = (x, y) => R.screenToTile(x, y);
     UI.busy = () => ptrs.size > 0 || !!R.zoomAnim || !!R.zoomFling;
 
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
+      const [ex, ey] = R.eventPos(e);
       if (!UI.G) return;
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetische Zeiger */ }
-      ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      ptrs.set(e.pointerId, { x: ex, y: ey });
       closeFlyout();
       R.vel = null;
       R.zoomAnim = null;
@@ -708,23 +728,31 @@
       }
       if (ptrs.size > 2) return;
       const tool = S.TOOLS[UI.tool];
-      const [tx, ty] = tileAt(e.offsetX, e.offsetY);
+      const [tx, ty] = tileAt(ex, ey);
       const now = performance.now();
-      st = { x: e.offsetX, y: e.offsetY, lx: e.offsetX, ly: e.offsetY, lt: now, vx: 0, vy: 0, tx, ty, moved: false };
+      st = { x: ex, y: ey, lx: ex, ly: ey, lt: now, vx: 0, vy: 0, tx, ty, moved: false };
       if (e.button === 1 || e.button === 2) { mode = 'pan'; return; }
       // zweimal tippen: Finger liegen lassen und ziehen zoomt, loslassen zoomt hinein
-      if (tool.kind === 'inspect' && lastTap && now - lastTap.t < 320 && Math.hypot(e.offsetX - lastTap.x, e.offsetY - lastTap.y) < 40) {
+      if (tool.kind === 'inspect' && lastTap && now - lastTap.t < 320 && Math.hypot(ex - lastTap.x, ey - lastTap.y) < 40) {
         mode = 'dzoom'; st.z0 = R.cam.z; lastTap = null;
         return;
       }
-      if (PAINT(tool)) { mode = 'paint'; paintDone.clear(); paintAt(tx, ty); }
-      else mode = 'tap';
+      if (PAINT(tool)) { mode = 'paint'; paintDone.clear(); paintAt(tx, ty); return; }
+      // gesetzten Bauplatz greifen und verschieben, statt neu zu tippen
+      const g = grabbable();
+      if (g) {
+        const [sx, sy] = R.worldToScreen((g[1][0] + 0.5) * S.TS, (g[1][1] + 0.5) * S.TS);
+        if (Math.hypot(sx - ex, sy - ey) < Math.max(34, S.TS * R.cam.z * 0.8)) { mode = 'move'; st.key = g[0]; R.loupe = { x: ex, y: ey }; return; }
+      }
+      mode = 'tap';
+      if (siteTool()) R.loupe = { x: ex, y: ey };   // Lupe zeigt genau das Feld unter dem Finger
     });
     cv.addEventListener('pointermove', (e) => {
+      const [ex, ey] = R.eventPos(e);
       if (!UI.G) return;
       const p = ptrs.get(e.pointerId);
       if (!p) { if (e.pointerType === 'mouse') hoverAt(e); return; }
-      p.x = e.offsetX; p.y = e.offsetY;
+      p.x = ex; p.y = ey;
       if (mode === 'pinch' && ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -744,7 +772,7 @@
         return;
       }
       if (mode === 'dzoom') {
-        const dy = e.offsetY - st.y;
+        const dy = ey - st.y;
         if (!st.moved && Math.abs(dy) > 6) st.moved = true;
         if (st.moved) {
           const [wx, wy] = R.screenToWorld(st.x, st.y);
@@ -756,23 +784,32 @@
         }
         return;
       }
-      if (mode === 'paint') { const [tx, ty] = tileAt(e.offsetX, e.offsetY); paintAt(tx, ty); return; }
+      if (mode === 'paint') { const [tx, ty] = tileAt(ex, ey); paintAt(tx, ty); return; }
+      if (mode === 'move') {
+        const [tx, ty] = tileAt(ex, ey);
+        moveSite(st.key, tx, ty);
+        R.loupe = { x: ex, y: ey };
+        return;
+      }
+      if (mode === 'tap' && R.loupe) R.loupe = { x: ex, y: ey };
       if (mode === 'pan' || mode === 'tap') {
-        const dx = e.offsetX - st.x, dy = e.offsetY - st.y;
-        if (!st.moved && Math.abs(dx) + Math.abs(dy) > 8) { st.moved = true; mode = 'pan'; }
+        const dx = ex - st.x, dy = ey - st.y;
+        if (!st.moved && Math.abs(dx) + Math.abs(dy) > (e.pointerType === 'mouse' ? 6 : 10)) { st.moved = true; mode = 'pan'; R.loupe = null; }
         if (st.moved) {
           const now = performance.now(), dt = Math.max(8, now - st.lt);
-          const mx = e.offsetX - st.lx, my = e.offsetY - st.ly;
+          const mx = ex - st.lx, my = ey - st.ly;
           R.cam.x -= mx / R.cam.z; R.cam.y -= my / R.cam.z;
           st.vx = st.vx * 0.5 + (mx / dt) * 0.5; st.vy = st.vy * 0.5 + (my / dt) * 0.5;
-          st.lx = e.offsetX; st.ly = e.offsetY; st.lt = now;
+          st.lx = ex; st.ly = ey; st.lt = now;
           R.clampCam();
         }
       }
     });
     const end = (e) => {
+      const [ex, ey] = R.eventPos(e);
       if (!ptrs.has(e.pointerId)) return;
       ptrs.delete(e.pointerId);
+      R.loupe = null;
       if (mode === 'pinch') {
         const now = performance.now();
         // kurz mit zwei Fingern getippt: herauszoomen
@@ -796,28 +833,31 @@
         mode = null;
         return;
       }
-      if (mode === 'done') { mode = null; return; }
+      if (mode === 'done' || mode === 'move') { mode = null; return; }
       if (mode === 'pan' && st.moved && performance.now() - st.lt < 90) {
         R.vel = { x: -st.vx / R.cam.z, y: -st.vy / R.cam.z };
       }
       if (mode === 'tap' && !st.moved) {
-        const [tx, ty] = tileAt(e.offsetX, e.offsetY);
-        lastTap = { t: performance.now(), x: e.offsetX, y: e.offsetY };
-        tapAt(tx, ty, e.offsetX, e.offsetY);
+        // Bauwerkzeuge: das Feld, das zuletzt in der Lupe lag; sonst die Stelle des ersten Kontakts
+        const px = siteTool() ? ex : st.x, py = siteTool() ? ey : st.y;
+        const [tx, ty] = tileAt(px, py);
+        lastTap = { t: performance.now(), x: px, y: py };
+        tapAt(tx, ty, px, py);
       } else if (mode === 'paint') UI.refresh();
       mode = null;
     };
     cv.addEventListener('pointerup', end);
-    cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) mode = null; });
+    cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); R.loupe = null; if (!ptrs.size) mode = null; });
     cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !mode) { R.hover = null; hideTip(); } });
     let wheelOver = 1;
     cv.addEventListener('wheel', (e) => {
+      const [ex, ey] = R.eventPos(e);
       e.preventDefault();
-      const [wx, wy] = R.screenToWorld(e.offsetX, e.offsetY);
+      const [wx, wy] = R.screenToWorld(ex, ey);
       R.cam.z *= Math.exp(-e.deltaY * 0.0015);
       R.clampCam();
-      R.cam.x = wx - (e.offsetX - R.cw / 2) / R.cam.z;
-      R.cam.y = wy - (e.offsetY - R.ch / 2) / R.cam.z;
+      R.cam.x = wx - (ex - R.cw / 2) / R.cam.z;
+      R.cam.y = wy - (ey - R.ch / 2) / R.cam.z;
       R.clampCam();
     }, { passive: false });
     $('zoomIn').addEventListener('click', () => zoomAt(R.cw / 2, R.ch / 2, 2));
@@ -1262,8 +1302,9 @@
 
   // --- Maus: Vorschau beim Überfahren (nur am Computer)
   function hoverAt(e) {
+    const [ex, ey] = R.eventPos(e);
     const G = UI.G;
-    const [tx, ty] = R.screenToTile(e.offsetX, e.offsetY);
+    const [tx, ty] = R.screenToTile(ex, ey);
     if (!S.inb(G, tx, ty)) { R.hover = null; hideTip(); return; }
     R.hover = [tx, ty];
     if (UI.tool !== 'inspect') { hideTip(); return; }
@@ -1277,12 +1318,13 @@
   }
 
   function showTip(e, html) {
+    const [ex, ey] = R.eventPos(e);
     const tip = $('tooltip');
     tip.innerHTML = html;
     tip.hidden = false;
     const w = $('mapWrap').clientWidth;
-    let x = e.offsetX + 16, y = e.offsetY + 14;
-    if (x + 240 > w) x = e.offsetX - 250;
+    let x = ex + 16, y = ey + 14;
+    if (x + 240 > w) x = ex - 250;
     tip.style.left = Math.max(4, x) + 'px'; tip.style.top = y + 'px';
   }
   function hideTip() { $('tooltip').hidden = true; }
@@ -1399,7 +1441,7 @@
       '<p><b>Gesetze.</b> Im Tab „Gesetze“ regierst du durch Entscheidungen: Bauförderung und sozialer Wohnungsbau lassen Städte schneller wachsen, Zuwanderung und Familienpolitik bringen Menschen, Umweltauflagen tauschen saubere Luft gegen Industrie. Wehrdienst, Rüstungsetat, Ausbildung, Propaganda und Soldatenfürsorge bestimmen, wie viele Soldaten du hast und wie gut sie kämpfen.</p>' +
       '<p><b>Wachstum.</b> Städte wachsen jeden Tag von selbst, wenn die Menschen zufrieden sind, Arbeit und Strom haben und angebunden sind. Das Stadt-Panel zeigt Wachstum, Neubauten und was bremst.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
-      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
+      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Beim Tippen zeigt eine Lupe über dem Finger genau das Feld, das getroffen wird; einen gesetzten Bauplatz kannst du mit dem Finger greifen und verschieben. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
       '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
       '<p><b>Militär.</b> Das Oberkommando führt deine Truppen selbst: Lege im Militär-Panel je Krieg fest, ob verteidigt, die Front gehalten oder angegriffen wird. Soldaten kommen aus der Bevölkerung – wie viele, hängt von Gesetzen und Zustimmung ab. Du kannst auch selbst eingreifen: Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Stillstehende Truppen graben sich ein, Erfahrung bringt Sterne, ohne eigenes Land in der Nähe fehlt der Nachschub, und mehrere Angreifer auf ein Ziel nutzen die Flanke. Fällt die Hauptstadt des Gegners, kapituliert er: Du kannst das ganze Land annektieren. Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {

@@ -75,6 +75,14 @@
     WM.baseR = Math.min(WM.cw, WM.ch * 0.8) * 0.44;
   };
 
+  /** Zeigerposition relativ zur Leinwand (unabhängig von Rändern und Skalierung) */
+  WM.evX = (e) => { const r = WM.canvas.getBoundingClientRect(); return (e.clientX - r.left) * (WM.cw / (r.width || 1)); };
+  WM.evY = (e) => { const r = WM.canvas.getBoundingClientRect(); return (e.clientY - r.top) * (WM.ch / (r.height || 1)); };
+  /** Größe nachführen, wenn sich der Platz auf dem Bildschirm geändert hat */
+  WM.syncSize = function () {
+    const c = WM.canvas;
+    if (c && c.clientWidth && c.clientHeight && (Math.abs(c.clientWidth - WM.cw) > 0.5 || Math.abs(c.clientHeight - WM.ch) > 0.5)) WM.resize();
+  };
   const radius = () => WM.baseR * WM.zoom;
   const center = () => [WM.cw / 2, WM.ch * (opts.cy || 0.46)];
 
@@ -172,6 +180,7 @@
   WM.draw = function (now) {
     const c = WM.ctx;
     if (!c) return;
+    if (!opts.noInput) WM.syncSize();
     const dt = lastT ? Math.min(50, (now || performance.now()) - lastT) : 16;
     lastT = now || performance.now();
     step(dt);
@@ -286,11 +295,11 @@
     const stopIdle = () => { WM.idle = false; WM.anim = null; };
     cv.addEventListener('pointerdown', (e) => {
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetische Zeiger */ }
-      ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      ptrs.set(e.pointerId, { x: WM.evX(e), y: WM.evY(e) });
       stopIdle();
       WM.vLon = 0; WM.vLat = 0;
       if (ptrs.size === 1) {
-        drag = { x: e.offsetX, y: e.offsetY, lx: e.offsetX, ly: e.offsetY, moved: false, t: performance.now() };
+        drag = { x: WM.evX(e), y: WM.evY(e), lx: WM.evX(e), ly: WM.evY(e), moved: false, t: performance.now() };
         WM.dragging = true;
       } else if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
@@ -301,10 +310,10 @@
     cv.addEventListener('pointermove', (e) => {
       const p = ptrs.get(e.pointerId);
       if (!p) {
-        if (e.pointerType === 'mouse') WM.hover = hit(e.offsetX, e.offsetY);
+        if (e.pointerType === 'mouse') WM.hover = hit(WM.evX(e), WM.evY(e));
         return;
       }
-      p.x = e.offsetX; p.y = e.offsetY;
+      p.x = WM.evX(e); p.y = WM.evY(e);
       if (ptrs.size >= 2 && pinch) {
         const [a, b] = [...ptrs.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -315,8 +324,8 @@
         return;
       }
       if (!drag) return;
-      const dx = e.offsetX - drag.lx, dy = e.offsetY - drag.ly;
-      if (Math.abs(e.offsetX - drag.x) + Math.abs(e.offsetY - drag.y) > 6) drag.moved = true;
+      const dx = WM.evX(e) - drag.lx, dy = WM.evY(e) - drag.ly;
+      if (Math.abs(WM.evX(e) - drag.x) + Math.abs(WM.evY(e) - drag.y) > 6) drag.moved = true;
       if (drag.moved) {
         rotateBy(dx, dy);
         const now = performance.now(), dtm = Math.max(8, now - lastMove);
@@ -325,7 +334,7 @@
         WM.vLat = dy / R / D2R / dtm * 0.9;
         lastMove = now;
       }
-      drag.lx = e.offsetX; drag.ly = e.offsetY;
+      drag.lx = WM.evX(e); drag.ly = WM.evY(e);
     });
     const up = (e) => {
       if (!ptrs.has(e.pointerId)) return;
@@ -338,12 +347,12 @@
           if (now - lastTap < 300) {
             // Doppeltippen: hineinzoomen
             WM.anim = { lon0: WM.lon, lat0: WM.lat, z0: WM.zoom, lon1: WM.lon, lat1: WM.lat, z1: Math.min(WM.maxZoom, WM.zoom * 2.2), t: 0 };
-            const p = unproject(e.offsetX, e.offsetY);
+            const p = unproject(WM.evX(e), WM.evY(e));
             if (p) { WM.anim.lon1 = WM.lon + angleDiff(p[0], WM.lon) * 0.6; WM.anim.lat1 = S.clamp(WM.lat + (p[1] - WM.lat) * 0.6, -75, 80); }
             lastTap = 0;
           } else {
             lastTap = now;
-            const h = hit(e.offsetX, e.offsetY);
+            const h = hit(WM.evX(e), WM.evY(e));
             if (h) { WM.sel = h; WM.onSelect(h); }
           }
         }

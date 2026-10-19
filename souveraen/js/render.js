@@ -43,6 +43,23 @@
     R.globe.hidden = new Set(Object.keys((G.mil && G.mil.annexed) || {}).map(e => R.globe.items[e - 1]));
     R.globe.sel = R.globe.itemById(G.meta.id) || null;
     R.resize();
+    // Größe des Kartenbereichs ändert sich auch ohne Fenster-Resize (Leisten, Schriften, Panels)
+    if (R._ro) R._ro.disconnect();
+    if (window.ResizeObserver) { R._ro = new ResizeObserver(() => R.syncSize()); R._ro.observe(canvas); }
+  };
+
+  /** Zeichenfläche an die tatsächliche Größe auf dem Bildschirm anpassen, sonst liegen Tipp und Feld auseinander */
+  R.syncSize = function () {
+    const c = R.canvas;
+    if (!c) return;
+    const w = c.clientWidth, h = c.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (w && h && (Math.abs(w - R.cw) > 0.5 || Math.abs(h - R.ch) > 0.5 || dpr !== R.dpr)) { R.resize(); if (R.G) R.clampCam(); }
+  };
+
+  /** Punkt eines Zeiger-Ereignisses in Kartenkoordinaten (CSS-Pixel), unabhängig von Rändern und Skalierung */
+  R.eventPos = function (e) {
+    const r = R.canvas.getBoundingClientRect();
+    return [(e.clientX - r.left) * (R.cw / (r.width || 1)), (e.clientY - r.top) * (R.ch / (r.height || 1))];
   };
 
   R.resize = function () {
@@ -1320,6 +1337,7 @@
   R.draw = function (time) {
     const G = R.G, c = R.ctx, cam = R.cam;
     if (!G) return;
+    R.syncSize();
     R.frame++;
     R.flush();
     S.Terr.update(G);
@@ -1464,6 +1482,7 @@
     if (ppt < 7) drawCountryNames(c, G, ppt);
     if (ppt >= 2.2) { const placed = []; drawLabels(c, G, placed); drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed); }
     if (G.mil && ppt >= 0.5) { c.globalAlpha = R.flatA; c.textBaseline = 'alphabetic'; drawUnits(c, G, time); }
+    if (R.loupe && flatA >= 1) drawLoupe(c, dpr);
     c.globalAlpha = 1;
   };
 
@@ -1656,6 +1675,36 @@
     S.FX.combat(c, G, T, byId);
     S.FX.events(c, G, time || performance.now());
     c.globalAlpha = R.flatA;
+  }
+
+  /** Lupe über dem Finger: vergrößerter Ausschnitt mit Fadenkreuz und dem Feld, das getroffen wird */
+  function drawLoupe(c, dpr) {
+    const { x, y } = R.loupe, r = 56, mag = 2.3;
+    let lx = S.clamp(x, r + 6, R.cw - r - 6), ly = y - r - 52;
+    if (ly - r < 6) ly = y + r + 52;
+    const rs = r / mag;
+    c.save();
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.globalAlpha = 1;
+    c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.arc(lx + 2, ly + 3, r + 3, 0, Math.PI * 2); c.fill();
+    c.save();
+    c.beginPath(); c.arc(lx, ly, r, 0, Math.PI * 2); c.clip();
+    c.fillStyle = '#0f2133'; c.fillRect(lx - r, ly - r, r * 2, r * 2);
+    c.imageSmoothingEnabled = true;
+    c.drawImage(R.canvas, (x - rs) * dpr, (y - rs) * dpr, rs * 2 * dpr, rs * 2 * dpr, lx - r, ly - r, r * 2, r * 2);
+    // getroffenes Feld
+    const [tx, ty] = R.screenToTile(x, y);
+    const [sx0, sy0] = R.worldToScreen(tx * TS, ty * TS), s = TS * R.cam.z;
+    const fx = lx + (sx0 - x) * mag, fy = ly + (sy0 - y) * mag, fs = s * mag;
+    c.lineWidth = 3; c.strokeStyle = 'rgba(10,15,20,0.8)'; c.strokeRect(fx, fy, fs, fs);
+    c.lineWidth = 1.6; c.strokeStyle = '#ffffff'; c.strokeRect(fx, fy, fs, fs);
+    // Fadenkreuz am genauen Berührpunkt
+    c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(lx - 9, ly); c.lineTo(lx - 3, ly); c.moveTo(lx + 3, ly); c.lineTo(lx + 9, ly); c.moveTo(lx, ly - 9); c.lineTo(lx, ly - 3); c.moveTo(lx, ly + 3); c.lineTo(lx, ly + 9); c.stroke();
+    c.restore();
+    c.strokeStyle = '#e3ad3c'; c.lineWidth = 3;
+    c.beginPath(); c.arc(lx, ly, r, 0, Math.PI * 2); c.stroke();
+    c.restore();
   }
 
   function drawCountryNames(c, G, ppt) {

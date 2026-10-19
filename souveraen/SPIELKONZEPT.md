@@ -114,6 +114,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - Beim Zoomen bleibt das Bild flüssig: Kartenblöcke entstehen mit festem Zeitbudget pro Bild, bis dahin springt die nächstbeste vorhandene Auflösung ein; die genaue Auflösung folgt, sobald der Zoom ruht.
 - **Städte bleiben sichtbar:** Weit draußen markiert ein Punkt jede eigene Stadt (Hauptstadt gold, Neugründungen grün), kleine Städte bekommen ein schmales Namensschild. Überlappen sich Schilder, weicht eines nach oben aus; Vorrang haben Auswahl, Hauptstadt, Neugründungen und große Städte. Truppen in einer Stadt schieben das Schild unter sich.
 - Werkzeugleiste unten in Daumenreichweite; die Werkzeuge erscheinen als Kartenraster mit Kosten.
+- **Genau tippen:** Die Karte misst ihre Größe laufend nach (auch wenn sich Leisten oder Schriften ändern), Tipps werden aus der echten Lage der Karte berechnet. Beim Bauen zeigt eine Lupe über dem Finger vergrößert das Feld, das getroffen wird; ein gesetzter Bauplatz lässt sich greifen und mit dem Finger verschieben.
 - **Antippen und bestätigen:** Ein Tipp setzt eine Vorschau, die Aktionsleiste zeigt Kosten, Ertrag an genau diesem Ort und Warnungen (z. B. fehlende Straße). Gebaut wird erst mit „Bauen“.
 - Straßen und Bahnen: Start und Ziel antippen; nach dem Bau ist das Ziel der neue Start, so lassen sich Strecken Stück für Stück ziehen.
 - Zonen und Geländeformung werden mit einem Finger gemalt, verschoben wird dann mit zwei Fingern.

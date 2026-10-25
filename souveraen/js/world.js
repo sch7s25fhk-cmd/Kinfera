@@ -223,6 +223,13 @@
    * Liefert ein Block-Objekt, das sich wie ein Kartenblock einfärben lässt.
    */
   Wd.sampleBlock = function (gx0, gy0, w, h, step) {
+    const g = Wd.sampleGen(gx0, gy0, w, h, step);
+    let r = g.next();
+    while (!r.done) r = g.next();
+    return r.value;
+  };
+  /** Dasselbe in Zeilen-Häppchen: liefert nach jeder Zeile, damit das Bild beim Rechnen flüssig bleibt */
+  Wd.sampleGen = function* (gx0, gy0, w, h, step) {
     const P = 1, ww = w + 2 * P, hh = h + 2 * P;
     const own = new Uint8Array(ww * hh), o16 = new Uint16Array(ww * hh);
     // Länderraster in grober Auflösung: Weltbreite vorübergehend auf WT/step setzen
@@ -266,9 +273,11 @@
         if (o && e >= 0) {
           const tt = tb - Math.max(0, e - 0.4) * 0.5;
           const f = S.fbm(nF, gx * sc * 2, gy * sc * 2, 2) + t.moist[id] * 0.55 - 0.35;
-          if (e < S.MOUNTAIN_E && tt > 0.12 && t.moist[id] > 0.45) t.forest[id] = S.clamp((f - 0.5) * 7, 0, 1);
+          // Waldanteil der Probe wie im feinen Raster (dort Wald ab f > 0,57); 0,62 gleicht die Verstärkung beim Weichzeichnen aus
+          if (e < S.MOUNTAIN_E && tt > 0.12 && t.moist[id] > 0.45) t.forest[id] = S.clamp((f - 0.57) / 0.16 + 0.5, 0, 1) * 0.62;
         }
       }
+      yield j;
     }
     return { W: w, H: h, t, gx0: gx0 / step, gy0: gy0 / step, meta: { seed } };
   };

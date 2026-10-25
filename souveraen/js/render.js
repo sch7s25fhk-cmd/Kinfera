@@ -42,6 +42,7 @@
     S.Terr.update(G, true);
     R.globe.hidden = new Set(Object.keys((G.mil && G.mil.annexed) || {}).map(e => R.globe.items[e - 1]));
     R.globe.sel = R.globe.itemById(G.meta.id) || null;
+    if (World.city) R.buildRegion(G);
     R.resize();
     // Größe des Kartenbereichs ändert sich auch ohne Fenster-Resize (Leisten, Schriften, Panels)
     if (R._ro) R._ro.disconnect();
@@ -255,6 +256,13 @@
    * Wald aus einem weichgezeichneten Feld, Feinstruktur je Pixel.
    */
   function terrainImage(Bk, PX) {
+    const g = terrainGen(Bk, PX);
+    let r = g.next();
+    while (!r.done) r = g.next();
+    return r.value;
+  }
+  /** Gelände-Bild in Zeilen-Häppchen (für große Übersichtsbilder) */
+  function* terrainGen(Bk, PX) {
     const { W, H, t } = Bk;
     const cv = document.createElement('canvas');
     cv.width = W * PX; cv.height = H * PX;
@@ -266,11 +274,14 @@
     const nA = R.noiseA, nB = R.noiseB, seed = Bk.meta.seed;
     const gpx = World.wrapGx(Bk.gx0) * PX, gpy = Bk.gy0 * PX;
     const NS = PX * (Bk.noiseScale || 1);   // Rauschen grober bei Übersichtsbildern
+    GRAIN = Bk.grain === undefined ? 1 : Bk.grain;   // Pixelkorn: bei vergrößerten Übersichtsbildern fast keins
+    const smooth = SMOOTH = !!Bk.smooth;            // Übersichtsbild: Farben mischen statt Muster
     const wx = [0, 0, 0, 0], wy = [0, 0, 0, 0];
     for (let py = 0; py < H * PX; py++) {
       for (let px = 0; px < W * PX; px++) {
         const qx = gpx + px, qy = gpy + py;
-        const n1 = nA(qx * 1.32 / NS, qy * 1.32 / NS), n2 = nB(qx * 0.68 / NS, qy * 0.68 / NS);
+        let n1 = nA(qx * 1.32 / NS, qy * 1.32 / NS), n2 = nB(qx * 0.68 / NS, qy * 0.68 / NS);
+        if (smooth) { n1 = 0.5 + (n1 - 0.5) * 0.3; n2 = 0.5 + (n2 - 0.5) * 0.3; }
         // verwirbelter Abtastpunkt (in Feldern)
         let fx = (px + 0.5) / PX - 0.5 + (n2 - 0.5) * 0.7, fy = (py + 0.5) / PX - 0.5 + (n1 - 0.5) * 0.7;
         fx = Math.max(0, Math.min(W - 1.001, fx)); fy = Math.max(0, Math.min(H - 1.001, fy));
@@ -287,7 +298,7 @@
         const i1 = Math.min(W - 1, i0 + 1), j1 = Math.min(H - 1, j0 + 1);
         const a = j0 * W + i0, b = j0 * W + i1, c = j1 * W + i0, d = j1 * W + i1;
         const w00 = (1 - u) * (1 - v), w10 = u * (1 - v), w01 = (1 - u) * v, w11 = u * v;
-        const grain = S.hash2(qx, qy, seed) - 0.5;
+        const grain = (S.hash2(qx, qy, seed) - 0.5) * GRAIN;
         e += (n1 - 0.5) * 0.035 + grain * 0.006;
         const m = M[a] * w00 + M[b] * w10 + M[c] * w01 + M[d] * w11 + (n2 - 0.5) * 0.12;
         const tt = T[a] * w00 + T[b] * w10 + T[c] * w01 + T[d] * w11;
@@ -295,15 +306,31 @@
         const ir = IR[a] * w00 + IR[b] * w10 + IR[c] * w01 + IR[d] * w11 + (n2 - 0.5) * 0.4;
         // Gefälle für das Relief aus den Nachbarfeldern
         const gx = (1 - v) * (E[b] - E[a]) + v * (E[d] - E[c]), gy = (1 - u) * (E[c] - E[a]) + u * (E[d] - E[b]);
-        const col = landColor(e, m, tt, f, ir, gx, gy, grain, qx, qy, PX, n1, n2);
+        let col = landColor(e, m, tt, f, ir, gx, gy, grain, qx, qy, PX, n1, n2);
+        if (smooth && e >= 0) {
+          // verkleinertes Luftbild: Wald und offenes Land mischen sich anteilig statt zu sprenkeln
+          const k = S.clamp(F[a] * w00 + F[b] * w10 + F[c] * w01 + F[d] * w11, 0, 1);
+          const r0 = col[0], g0 = col[1], b0 = col[2];
+          const c0 = landColor(e, m, tt, 0, ir, gx, gy, grain, qx, qy, PX, n1, n2);
+          const or = c0[0], og = c0[1], ob = c0[2];
+          const c1 = landColor(e, m, tt, 1, ir, gx, gy, grain, qx, qy, PX, n1, n2);
+          // Gebirge, Wüste, Eis: so lassen, wie es ist
+          if (Math.abs(c1[0] - or) + Math.abs(c1[1] - og) + Math.abs(c1[2] - ob) > 6) { c1[0] = or + (c1[0] - or) * k; c1[1] = og + (c1[1] - og) * k; c1[2] = ob + (c1[2] - ob) * k; }
+          else { c1[0] = r0; c1[1] = g0; c1[2] = b0; }
+          col = c1;
+        }
         const o = (py * IW + px) * 4;
         data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = 255;
       }
+      // zwischen den Häppchen kann anderes Gelände gezeichnet werden: Einstellungen danach wiederherstellen
+      if (smooth) { GRAIN = 1; SMOOTH = false; yield py; GRAIN = Bk.grain; SMOOTH = true; }
     }
     ctx.putImageData(img, 0, 0);
+    GRAIN = 1; SMOOTH = false;
     return cv;
   }
 
+  let GRAIN = 1, SMOOTH = false;
   const _col = [0, 0, 0];
   // Feldfrüchte aus der Luft: Weizen, Raps, gepflügter Acker, junges Grün, Wiese, Stoppelfeld
   const FIELDS = [[196, 178, 108], [176, 170, 70], [128, 104, 76], [104, 132, 62], [92, 120, 58], [168, 152, 112], [118, 140, 74]];
@@ -341,14 +368,14 @@
           const fu = (qx * ca + qy * sa) / (sz * (0.7 + S.hash2(cv, 7, 97) * 1.6)) + S.hash2(cv, 3, 95) * 3;
           const cu = Math.floor(fu);
           const F = FIELDS[Math.floor(S.hash2(cu, cv, 93) * FIELDS.length)];
-          const k = 0.45 * farm;
+          const k = (SMOOTH ? 0.12 : 0.45) * farm;
           r += (F[0] - r) * k; g += (F[1] - g) * k; bl += (F[2] - bl) * k;
           const du = fu - cu, dv = fv - cv;
           if (sz > 3 && (Math.min(du, 1 - du) < 0.08 || Math.min(dv, 1 - dv) < 0.1)) { r *= 1 - 0.15 * farm; g *= 1 - 0.08 * farm; bl *= 1 - 0.16 * farm; }
         }
       } else if (bio === B.FOREST || bio === B.JUNGLE || bio === B.TAIGA) {
         // Kronendach: helle Wipfel, dunkle Lücken
-        const crown = (S.hash2(qx, qy, 17) - 0.5) * 0.7 + (n2 - 0.5) * 0.6;
+        const crown = (S.hash2(qx, qy, 17) - 0.5) * 0.7 * GRAIN + (n2 - 0.5) * 0.6;
         const k = crown * 26 + (n1 - 0.5) * 22;
         r += k * 0.7; g += k; bl += k * 0.6;
       } else if (bio === B.MOUNTAIN || bio === B.HILLS) {
@@ -363,7 +390,8 @@
       const snow = S.clamp((e - 0.95) * 6, 0, 1) + S.clamp((0.18 - (tt - Math.max(0, e - 0.4) * 0.5)) * 6, 0, 1) * (e > 0.6 ? 1 : 0);
       if (snow > 0) { const k = Math.min(1, snow); r += (238 - r) * k; g += (242 - g) * k; bl += (246 - bl) * k; }
       // Relief: Licht von Nordwesten, stärker im Gebirge
-      const relief = e > 0.45 ? 1.6 : 1;
+      // in Übersichtsbildern verschwinden kleine Hügel wie auf einem verkleinerten Luftbild, Gebirge bleiben
+      const relief = (e > 0.45 ? 1.6 : 1) * (SMOOTH ? (e > 0.45 ? 0.55 : 0.15) : 1);
       const sh = S.clamp(-(dx + dy) * 260 * relief, -60, 60);
       r += sh; g += sh; bl += sh * 0.92;
       r += grain * 7; g += grain * 7; bl += grain * 6;
@@ -548,38 +576,64 @@
 
   // ---------------- Grobe Weltkarte (ganz weit draußen, flach) ----------------
   // ---------------- Umland (Stadtmodus): grobe Geländebilder rund um die Stadt ----------------
-  const REGION_LEVELS = [[8, 512], [2, 512]];   // [Felder je Pixel, Pixel]
-  function regionImage(G, step, n) {
+  // Drei Stufen, je viermal feiner: ≈ 4.000 km, 1.000 km und 250 km rund um die Stadt
+  const REGION_LEVELS = [[32, 512], [8, 512], [2, 512]];   // [Felder je Pixel, Pixel]
+  function* regionGen(G, step, n) {
     const cx = G.gx0 + G.W / 2, cy = G.gy0 + G.H / 2;
-    const gx0 = Math.round((cx - n * step / 2) / step) * step, gy0 = Math.round((cy - n * step / 2) / step) * step;
-    const Bk = World.sampleBlock(gx0, gy0, n, n, step);
+    const gx0 = Math.round((cx - n * step / 2) / step) * step;
+    // nicht über den Rand der Mercator-Welt hinaus
+    const gy0 = S.clamp(Math.round((cy - n * step / 2) / step) * step, 0, Math.max(0, World.WT - n * step));
+    const Bk = yield* World.sampleGen(gx0, gy0, n, n, step);
     Bk.noiseScale = step >= 8 ? 4 : 2;
-    const cv = terrainImage(Bk, 1);
-    // Ränder weich ausblenden
-    const ctx = cv.getContext('2d'), img = ctx.getImageData(0, 0, n, n), d = img.data, fe = n * 0.2;
+    Bk.grain = 0.15; Bk.smooth = true;
+    const cv = yield* terrainGen(Bk, 1);
+    // rund und sehr weich ausblenden: keine Kanten, die gröbere Stufe darunter scheint allmählich durch
+    const ctx = cv.getContext('2d'), img = ctx.getImageData(0, 0, n, n), d = img.data;
+    const mx = (cx - gx0) / step, my = (cy - gy0) / step;
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      const k = Math.min(x, y, n - 1 - x, n - 1 - y) / fe;
-      if (k < 1) d[(y * n + x) * 4 + 3] = 255 * k * k * (3 - 2 * k);
+      // Abstand zum nächsten Rand, damit auch eine an den Weltrand geschobene Stufe sauber ausläuft
+      const r = Math.max(Math.hypot(x - mx, y - my) / (n / 2), 1 - Math.min(x, y, n - 1 - x, n - 1 - y) / (n * 0.18));
+      const k = S.clamp((0.98 - r) / 0.6, 0, 1);
+      d[(y * n + x) * 4 + 3] = 255 * k * k * (3 - 2 * k);
     }
     ctx.putImageData(img, 0, 0);
     return { cv, gx0, gy0, size: n * step };
   }
-  function drawRegion(c, G, flatA) {
-    if (!R.region || R.region.G !== G) R.region = { G, levels: [], next: 0, t: 0 };
-    const Rg = R.region;
-    // eine Stufe pro Bild nachbauen, sobald die Karte ruht
-    if (Rg.next < REGION_LEVELS.length && performance.now() - Rg.t > 300 && R.renderedNow === 0) {
-      const [step, n] = REGION_LEVELS[Rg.next++];
-      Rg.levels.push(regionImage(G, step, n));
-      Rg.t = performance.now(); R.renderedNow++;
+  /** Umland neu aufsetzen; die Stufen entstehen in Häppchen während der folgenden Bilder */
+  R.buildRegion = function (G) { R.region = { G, levels: [], next: 0, job: null }; };
+  /** Alle Stufen sofort fertig rechnen (für Tests) */
+  R.finishRegion = function () { while (R.region && stepRegion(R.region, 1e9)) { /* weiter */ } };
+  /** rechnet höchstens ms Millisekunden an der nächsten Stufe; false, wenn alles fertig ist */
+  function stepRegion(Rg, ms) {
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms) {
+      if (!Rg.job) {
+        if (Rg.next >= REGION_LEVELS.length) return false;
+        const [step, n] = REGION_LEVELS[Rg.next++];
+        Rg.job = regionGen(Rg.G, step, n);
+      }
+      for (let k = 0; k < 8; k++) {
+        const r = Rg.job.next();
+        if (r.done) { r.value.born = performance.now(); Rg.levels.push(r.value); Rg.job = null; break; }
+      }
     }
-    c.globalAlpha = flatA;
-    for (const L of Rg.levels) {
+    return true;
+  }
+  function drawRegion(c, G, flatA) {
+    const Rg = R.region;
+    const ppt = R.cam.z * TS * R.dpr;
+    Rg.levels.forEach((L, i) => {
+      // feinere Stufen erst zeigen, wenn ein Bildpunkt mindestens einen Bildschirmpunkt groß ist – verkleinert flimmern sie
+      const zoomA = i === 0 ? 1 : S.clamp((L.size / 512 * ppt - 0.5) / 0.7, 0, 1);
+      if (zoomA <= 0) return;
+      // fertig gewordene Stufen weich einblenden statt aufploppen
+      c.globalAlpha = flatA * zoomA * S.clamp((performance.now() - L.born) / 600, 0, 1);
       for (const k of [-1, 0, 1]) {
         const wx = (L.gx0 - G.gx0 + k * World.WT) * TS, wy = (L.gy0 - G.gy0) * TS;
         c.drawImage(L.cv, wx, wy, L.size * TS, L.size * TS);
       }
-    }
+    });
+    c.globalAlpha = flatA;
   }
 
   function worldTexture() {
@@ -1816,6 +1870,11 @@
     const flatA = S.clamp((gr / m - R.GLOBE_FULL) / (R.GLOBE_FLAT - R.GLOBE_FULL), 0, 1);
     const ppt = z * TS * dpr;
     R.flatA = flatA; R.ppt = ppt;
+    // Umland der Stadt: ein paar Millisekunden je Bild weiterrechnen, auch schon während der Globus zu sehen ist
+    if (World.city) {
+      if (!R.region || R.region.G !== G) R.buildRegion(G);
+      stepRegion(R.region, zooming && flatA > 0 ? 3 : 7);
+    }
     // 1) Globus (weit draußen)
     if (flatA < 1) {
       const g = R.globe;

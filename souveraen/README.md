@@ -37,7 +37,7 @@ Als veröffentlichtes Artefakt trägt das Spiel jede gegründete Stadt in eine g
 | Zoomen (Globus und Karte) | zwei Finger (mit Schwung), doppelt tippen, doppelt tippen und ziehen (eine Hand), mit zwei Fingern kurz tippen zum Herauszoomen, oder die Knöpfe + / − |
 | Karte verschieben | ein Finger |
 | Welt erkunden | stufenlos herauszoomen bis zum Globus; „Zu meiner Stadt“ fliegt zurück |
-| Gebäude, Ortsteil gründen, Abriss | Werkzeug wählen, Bauplatz antippen (die Lupe zeigt das getroffene Feld), Bauplatz bei Bedarf mit dem Finger verschieben, „Bauen“ bestätigen |
+| Gebäude (über 40: Betriebe, Energie, Soziales, Dienste, Verkehr), Ortsteil gründen, Abriss | Werkzeug wählen, Bauplatz antippen (die Lupe zeigt das getroffene Feld), Bauplatz bei Bedarf mit dem Finger verschieben, „Bauen“ bestätigen |
 | Straße/Bahn | Start antippen, Ziel antippen, „Bauen“ – das Ziel wird zum nächsten Start |
 | Zonen, Gelände formen | mit einem Finger malen, zwei Finger verschieben |
 | Regieren | Tab „Gesetze“: Wohnungsbau, Zuwanderung, Familie, Umwelt, Steuern und mehr |
@@ -48,6 +48,7 @@ Ein Spielmonat dauert einen echten Tag (schnell: 1 Stunde, Zeitraffer: 2 Minuten
 
 ```bash
 node tools/citytest.js 48.137,11.575              # Stadt an Koordinaten gründen, zwei Jahre wachsen lassen
+node tools/buildtest.js 48.137,11.575             # alle neuen Gebäude bauen und ihre Wirkung prüfen
 node tools/simtest.js DEU EGY JPN --months=120   # Simulation ohne Browser testen (alter Ländermodus)
 node tools/wartest.js DEU FRA 20                  # Krieg ohne Browser durchspielen (alter Ländermodus)
 node tools/growtest.js DEU FRA 25                 # erobertes Land ins Raster übernehmen und dort eine Stadt gründen

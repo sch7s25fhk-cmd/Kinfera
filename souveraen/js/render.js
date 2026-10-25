@@ -517,7 +517,7 @@
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const bl = t.bld[y * W + x];
       if (bl < 10) continue;
-      c.fillStyle = bl === 10 ? 'rgba(190,170,96,0.8)' : bl === 21 ? '#2a4a72' : bl === 32 ? '#6f9f50' : bl === 23 ? '#3f6f88' : 'rgba(150,146,138,0.85)';
+      c.fillStyle = bl === 10 ? 'rgba(190,170,96,0.8)' : bl === 21 ? '#2a4a72' : bl === 32 || bl === 38 ? '#6f9f50' : bl === 23 || bl === 46 ? '#3f6f88' : bl === 40 ? '#c9dde0' : bl === 27 ? '#5f8f4a' : 'rgba(150,146,138,0.85)';
       c.fillRect(x * OVR + 0.5, y * OVR + 0.5, OVR - 1, OVR - 1);
     }
     c.strokeStyle = '#4a4b4c'; c.lineWidth = 1.6; c.lineCap = 'round';
@@ -1237,6 +1237,149 @@
         break;
       }
       case 34: drawMonument(c, G, X, Y, x, y); break;
+      default: drawBuildingExtra(c, b, X, Y, x, y);
+    }
+  }
+
+  /** Gebäude der Erweiterung, von oben wie im Luftbild */
+  function drawBuildingExtra(c, b, X, Y, x, y) {
+    switch (b) {
+      case 25: { // Gaskraftwerk: Turbinenhalle, zwei schlanke Schornsteine, Gastanks
+        box(c, X + 2, Y + 9, 13, 10, 7, '#9aa1a6', '#8d949a');
+        for (const [ox, oy] of [[18, 5], [18, 15]]) { roundShadow(c, X + ox, Y + oy, 3.2, 3); dot(c, X + ox, Y + oy, 3.2, '#dfe2e4'); dot(c, X + ox - 0.9, Y + oy - 0.9, 1.1, 'rgba(255,255,255,0.6)'); }
+        box(c, X + 4, Y + 2, 2.2, 2.2, 16, '#c9c9c4', '#7b7b78');
+        box(c, X + 9, Y + 2, 2.2, 2.2, 16, '#c9c9c4', '#7b7b78');
+        break;
+      }
+      case 26: { // Geothermie: Kraftwerkshalle, Dampfbecken, Rohrleitungen
+        c.fillStyle = '#a49c8c'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        c.strokeStyle = '#c7c9cb'; c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(X + 3, Y + 20); c.lineTo(X + 21, Y + 20); c.moveTo(X + 21, Y + 20); c.lineTo(X + 21, Y + 6); c.stroke();
+        box(c, X + 3, Y + 4, 11, 8, 6, '#e3e1dc', '#cfccc5');
+        c.fillStyle = '#5f9fb8'; c.beginPath(); c.ellipse(X + 9, Y + 17, 5, 2.6, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.55)'; c.beginPath(); c.arc(X + 19, Y + 5, 3.2, 0, Math.PI * 2); c.fill();
+        break;
+      }
+      case 27: { // Biogasanlage: grüne Fermenterkuppeln, Silo
+        c.fillStyle = '#9b9a7a'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        for (const [ox, oy, r] of [[7, 8, 5], [17, 8, 4.4], [9, 18, 4]]) {
+          roundShadow(c, X + ox, Y + oy, r, 4);
+          const g = c.createRadialGradient(X + ox - r * 0.4, Y + oy - r * 0.4, r * 0.1, X + ox, Y + oy, r);
+          g.addColorStop(0, '#9ccf72'); g.addColorStop(1, '#3f7a3a');
+          c.fillStyle = g; c.beginPath(); c.arc(X + ox, Y + oy, r, 0, Math.PI * 2); c.fill();
+        }
+        c.fillStyle = '#c5a35a'; c.fillRect(X + 15, Y + 15, 7, 6);
+        break;
+      }
+      case 35: { // Schule: L-förmiger Bau mit Sportplatz
+        c.fillStyle = '#b8563f'; c.fillRect(X + 12, Y + 12, 10, 10);
+        c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.5; c.strokeRect(X + 13, Y + 13, 8, 8);
+        box(c, X + 2, Y + 2, 20, 7, 7, '#f0e6cf', '#d49a4a', { pitched: true });
+        box(c, X + 2, Y + 9, 7, 13, 7, '#f0e6cf', '#d49a4a', { pitched: true });
+        tree(c, X + 14, Y + 10.5, 1.8, 'leaf');
+        break;
+      }
+      case 36: { // Polizeiwache: Flachdach, Parkplatz mit Streifenwagen
+        c.fillStyle = '#7d7f82'; c.fillRect(X + 1, Y + 14, TS - 2, 9);
+        for (let k = 0; k < 3; k++) { c.fillStyle = k === 1 ? '#f2f2f2' : '#1f5fa8'; c.fillRect(X + 3 + k * 6.5, Y + 16.5, 4, 2.2); c.fillStyle = '#f2f2f2'; c.fillRect(X + 4 + k * 6.5, Y + 16.5, 1.4, 2.2); }
+        box(c, X + 2, Y + 2, 20, 11, 8, '#d5dbe2', '#c3cbd4');
+        c.fillStyle = '#1f5fa8'; c.fillRect(X + 4, Y + 4, 6, 3);
+        break;
+      }
+      case 37: { // Feuerwache: rotes Dach, Hof mit Löschfahrzeugen, Schlauchturm
+        c.fillStyle = '#8c8a86'; c.fillRect(X + 1, Y + 13, TS - 2, 10);
+        for (let k = 0; k < 2; k++) { c.fillStyle = '#c8281e'; c.fillRect(X + 4 + k * 8, Y + 16, 6, 3); c.fillStyle = '#f0d040'; c.fillRect(X + 4 + k * 8, Y + 16, 6, 0.8); }
+        box(c, X + 2, Y + 2, 15, 10, 7, '#d8c7b0', '#b0392c', { pitched: true });
+        box(c, X + 18, Y + 3, 4, 4, 14, '#c9b9a2', '#9b3328');
+        break;
+      }
+      case 38: { // Schwimmbad: Becken, Sprungturm, Liegewiese
+        c.fillStyle = '#7fae5a'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        c.fillStyle = '#e6e2d8'; c.fillRect(X + 3, Y + 4, 15, 10);
+        c.fillStyle = '#3fb2d8'; c.fillRect(X + 4, Y + 5, 13, 8);
+        c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 0.4;
+        c.beginPath(); for (let k = 1; k < 4; k++) { c.moveTo(X + 4, Y + 5 + k * 2); c.lineTo(X + 17, Y + 5 + k * 2); } c.stroke();
+        c.fillStyle = '#66c8e8'; c.beginPath(); c.ellipse(X + 8, Y + 19, 3.5, 2.2, 0, 0, Math.PI * 2); c.fill();
+        for (let k = 0; k < 4; k++) { c.fillStyle = ['#e85c4a', '#f2c94c', '#ffffff', '#4a90e2'][k]; c.fillRect(X + 14 + (k % 2) * 3.5, Y + 16 + (k >> 1) * 3, 2.4, 1.2); }
+        tree(c, X + 21, Y + 4, 2.2, 'leaf'); tree(c, X + 21, Y + 20, 2.4, 'leaf');
+        break;
+      }
+      case 39: { // Museum: klassizistischer Bau mit Säulenvorbau und Glaskuppel
+        c.fillStyle = '#d9cfb8'; c.fillRect(X + 2, Y + 18, 20, 4);
+        box(c, X + 3, Y + 3, 18, 14, 9, '#efe7d4', '#d8cfbc');
+        roundShadow(c, X + 12, Y + 10, 3.6, 4);
+        const g = c.createRadialGradient(X + 11, Y + 9, 0.5, X + 12, Y + 10, 3.6);
+        g.addColorStop(0, '#e6f2f8'); g.addColorStop(1, '#7aa6bf');
+        c.fillStyle = g; c.beginPath(); c.arc(X + 12, Y + 10, 3.6, 0, Math.PI * 2); c.fill();
+        c.fillStyle = 'rgba(0,0,0,0.25)'; for (let k = 0; k < 6; k++) c.fillRect(X + 5 + k * 2.8, Y + 17, 0.9, 1.6);
+        break;
+      }
+      case 40: { // Gewächshaus: lange Glasreihen
+        c.fillStyle = '#9a9888'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        for (let k = 0; k < 4; k++) {
+          c.fillStyle = 'rgba(10,14,18,0.25)'; c.fillRect(X + 3, Y + 3.6 + k * 5, 19, 4);
+          c.fillStyle = '#d9ecef'; c.fillRect(X + 2.4, Y + 3 + k * 5, 19, 4);
+          c.fillStyle = 'rgba(120,170,110,0.45)'; c.fillRect(X + 2.4, Y + 4.5 + k * 5, 19, 2.5);
+          c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(X + 2.4, Y + 3 + k * 5, 19, 0.7);
+        }
+        break;
+      }
+      case 41: { // Technologiepark: Glasbauten, Grünflächen, Parkplatz
+        c.fillStyle = '#86a86a'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        c.fillStyle = '#8a8c8f'; c.fillRect(X + 14, Y + 15, 8, 7);
+        box(c, X + 2, Y + 2, 10, 8, 12, '#9fb8c8', '#6f9ab5', { glass: true });
+        box(c, X + 14, Y + 3, 8, 9, 9, '#a9c2d0', '#7aa3bb', { glass: true });
+        box(c, X + 3, Y + 13, 8, 8, 7, '#e9ecef', '#d6dbe0');
+        tree(c, X + 12.5, Y + 12, 1.8, 'leaf');
+        break;
+      }
+      case 42: { // Einkaufszentrum: großes Flachdach mit Oberlichtern, Parkplatz
+        c.fillStyle = '#6f7275'; c.fillRect(X + 1, Y + 15, TS - 2, 8);
+        c.fillStyle = 'rgba(255,255,255,0.6)'; for (let k = 0; k < 6; k++) c.fillRect(X + 2.5 + k * 3.5, Y + 16, 0.5, 6);
+        box(c, X + 2, Y + 2, 20, 12, 7, '#d8d4cc', '#cfcac0');
+        c.fillStyle = '#9fc3d6'; for (let k = 0; k < 3; k++) c.fillRect(X + 4 + k * 6, Y + 6, 4, 4);
+        break;
+      }
+      case 43: { // Hotel: Hochhaus mit Pool auf dem Dach
+        c.fillStyle = '#86a86a'; c.fillRect(X + 2, Y + 2, 20, 20);
+        box(c, X + 4, Y + 4, 13, 11, 20, '#e8e2d6', '#d6cfc2');
+        c.fillStyle = '#3fb2d8'; c.fillRect(X + 6, Y + 6, 5, 3);
+        c.fillStyle = '#c9a24a'; c.fillRect(X + 13, Y + 6, 2.5, 6);
+        tree(c, X + 20, Y + 19, 2.4, 'palm');
+        break;
+      }
+      case 46: { // Kläranlage: runde Klärbecken
+        c.fillStyle = '#a3a091'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        for (const [ox, oy, r] of [[7, 7, 5], [17, 7, 5], [7, 17, 5], [17, 17, 4]]) {
+          dot(c, X + ox, Y + oy, r, '#cfcbc0'); dot(c, X + ox, Y + oy, r - 1, ox === 17 && oy === 17 ? '#6f8a4a' : '#4f7f8f');
+          c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(X + ox - r + 1, Y + oy); c.lineTo(X + ox + r - 1, Y + oy); c.stroke();
+        }
+        break;
+      }
+      case 47: { // Recyclinghof: Halle und bunte Container
+        c.fillStyle = '#8f8b84'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        box(c, X + 2, Y + 2, 12, 9, 6, '#5f8f5a', '#4f7f4a');
+        const cols = ['#2e76a8', '#d9a12a', '#2f8f57', '#b5422f', '#8a8f96', '#d9a12a'];
+        for (let k = 0; k < 6; k++) box(c, X + 3 + (k % 3) * 6.5, Y + 14 + ((k / 3) | 0) * 4.5, 5, 3.2, 2, cols[k], cols[k]);
+        c.fillStyle = '#6a5a4a'; c.beginPath(); c.ellipse(X + 19, Y + 7, 3.5, 3, 0, 0, Math.PI * 2); c.fill();
+        break;
+      }
+      case 48: { // Bahnhof: Bahnsteige mit Dach, Empfangsgebäude
+        c.fillStyle = '#9b968c'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        c.fillStyle = '#c8c3b8'; c.fillRect(X + 2, Y + 11, 20, 3); c.fillRect(X + 2, Y + 18, 20, 3);
+        box(c, X + 3, Y + 11, 18, 3, 3, '#7d8a93', '#5f6d77');
+        box(c, X + 3, Y + 18, 18, 3, 3, '#7d8a93', '#5f6d77');
+        box(c, X + 4, Y + 2, 16, 7, 7, '#e2d4b8', '#a9573f', { pitched: true });
+        roundShadow(c, X + 12, Y + 5.5, 1.6, 6); dot(c, X + 12, Y + 5.5, 1.6, '#f2f2f2');
+        break;
+      }
+      case 49: { // Busbahnhof: Bussteige unter einem Dach, Busse
+        c.fillStyle = '#6f7275'; c.fillRect(X + 1, Y + 1, TS - 2, TS - 2);
+        c.fillStyle = '#f2f2f2'; for (let k = 0; k < 4; k++) c.fillRect(X + 3 + k * 5, Y + 13, 0.6, 9);
+        for (let k = 0; k < 3; k++) { box(c, X + 4 + k * 5, Y + 14, 3, 8, 2.5, '#f2c230', '#f2c230'); c.fillStyle = 'rgba(30,40,50,0.6)'; c.fillRect(X + 4.3 + k * 5, Y + 14.5, 2.4, 1.6); }
+        box(c, X + 2, Y + 3, 20, 7, 4, '#d8dde2', '#b7c3cc');
+        break;
+      }
     }
   }
 
@@ -1630,6 +1773,7 @@
         break;
       }
       case 34: drawMonumentIcon(c, G, X, Y, x, y); break;
+      default: drawBuildingExtra(c, b, X, Y, x, y);
     }
   }
 
@@ -2317,6 +2461,7 @@
       else if (b === 15) { sx = 20.7; sy = 4.7; }
       else if (b === 20) { sx = 8; sy = 8; white = true; big = 1.3; }
       else if (b === 24) { sx = 6; sy = 7; white = true; big = 1.4; }
+      else if (b === 25) { sx = 5; sy = 3; white = true; big = 0.7; }
       else continue;
       const bx = x * TS + sx, by = y * TS + sy;
       // Rauchfahne von oben: zieht mit dem Wind nach Osten und weitet sich

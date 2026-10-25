@@ -249,6 +249,10 @@
       case 16: if (countAround(G, x, y, 1, n => water(n) && t.elev[n] < -0.02) < 2 || !S.isCoastal(G, x, y, 2)) return { ok: false, reason: 'Nur direkt an der Meeresküste' }; break;
       case 17: if (e >= S.HILL_E) return { ok: false, reason: 'Braucht flaches Land' }; break;
       case 24: if (!countAround(G, x, y, 2, n => water(n) || t.river[n])) return { ok: false, reason: 'Braucht Kühlwasser (Fluss/See/Meer)' }; break;
+      case 26: if (e < S.HILL_E) return { ok: false, reason: 'Nur auf Hügeln oder im Bergland' }; break;
+      case 40: case 41: case 42: if (e >= S.HILL_E) return { ok: false, reason: 'Braucht flaches Land' }; break;
+      case 46: if (!countAround(G, x, y, 2, n => water(n) || t.river[n])) return { ok: false, reason: 'Muss an einem Fluss, See oder am Meer liegen' }; break;
+      case 48: if (!countAround(G, x, y, 1, n => t.road[n] & 2)) return { ok: false, reason: 'Muss direkt an einer Bahnstrecke liegen' }; break;
     }
     return { ok: true };
   };
@@ -587,7 +591,14 @@
 
   function servicesFor(G) {
     const R = S.SERVICE_RADIUS;
-    for (const c of G.cities) { c.uni = 0; c.hosp = 0; c.stad = 0; c.monu = 0; c.airport = 0; }
+    for (const c of G.cities) { c.uni = 0; c.hosp = 0; c.stad = 0; c.monu = 0; c.airport = 0; c.svc = {}; }
+    // neue Dienste: jede Stadt im Umkreis zählt das Gebäude (ohne Straßenanschluss nur 40 %)
+    for (const b of G.blds) {
+      const def = S.BLD[b.b];
+      if (!def.svc || b.occ) continue;
+      const eff = b.conn ? 1 : 0.4;
+      for (const c of G.cities) if (Math.hypot(c.x - b.x, c.y - b.y) <= def.r + Math.sqrt(c.tiles || 1) * 0.5) c.svc[def.svc] = (c.svc[def.svc] || 0) + eff;
+    }
     for (const b of G.blds) {
       if (![30, 31, 33, 34, 17].includes(b.b)) continue;
       const near = G.cities.filter(c => Math.hypot(c.x - b.x, c.y - b.y) <= (b.b === 33 || b.b === 34 ? 10 : R));
@@ -604,7 +615,7 @@
   // ======================= Produktion =======================
   S.buildingOutput = function (G, b) {
     const t = G.t, id = S.idx(G, b.x, b.y);
-    const out = { food: 0, raw: 0, goods: 0, energy: 0, rawUse: 0 };
+    const out = { food: 0, raw: 0, goods: 0, energy: 0, rawUse: 0, value: 0 };
     const tech = 1 + S.mod(G, 'renew');
     const drought = 1 - S.mod(G, 'drought');
     switch (b.b) {
@@ -629,6 +640,13 @@
       }
       case 23: out.energy = 90; break;
       case 24: out.energy = 400; break;
+      case 25: out.energy = 80; out.rawUse = 2; break;
+      case 26: out.energy = 60; break;
+      case 27: out.energy = 20 + 8 * Math.min(5, G.blds.filter(q => q.b === 10 && Math.hypot(q.x - b.x, q.y - b.y) <= 5).length); break;
+      case 40: out.food = 6 * (0.8 + G.eco.eduLevel * 0.3); break;
+      case 41: out.goods = 4 + 10 * S.clamp(G.eco.eduLevel, 0, 1.3); break;
+      case 42: out.value = 8; break;
+      case 47: out.raw = 3; break;
     }
     return out;
   };
@@ -660,16 +678,17 @@
     for (const c of G.cities) eDem += c.energy;
     const outs = G.blds.map(b => {
       const o = S.buildingOutput(G, b);
-      const eff = b.occ ? 0 : (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod * (b.b >= 13 && b.b <= 15 ? ind : 1);
+      const eff = b.occ ? 0 : (b.conn ? 1 : 0.4) * laborRatio * strike * gov.prod * ((b.b >= 13 && b.b <= 15) || b.b === 41 ? ind : 1);
       if (!b.occ) { eDem += S.BLD[b.b].energy; eProd += o.energy * (b.conn ? 1 : 0.4); }
       return { o, eff, b };
     });
     const energyRatio = eDem > 0 ? Math.min(1, eProd / eDem) : 1;
 
     // --- Rohstoffe, Nahrung, Güter
-    let food = 0, raw = 0, goods = 0, rawUse = 0, prodValue = 0;
+    let food = 0, raw = 0, goods = 0, rawUse = 0, prodValue = 0, trade = 0;
     for (const { o, eff, b } of outs) {
-      const en = (b.b >= 13 && b.b <= 17) ? (0.3 + 0.7 * last.energyRatio) : 1;
+      const en = (b.b >= 13 && b.b <= 17) || (b.b >= 40 && b.b <= 42) ? (0.3 + 0.7 * last.energyRatio) : 1;
+      trade += o.value * eff * en;
       food += o.food * eff; raw += o.raw * eff * en;
       goods += o.goods * eff * en * last.rawRatio;
       rawUse += o.rawUse * (o.goods ? eff * en : 1);
@@ -705,14 +724,16 @@
     // --- Einnahmen
     const prod = (0.7 + 0.6 * eco.eduLevel) * I.wage;
     const incomeTax = pop * employment * 0.0082 * prod * eco.taxInc;
-    prodValue = food * P.food + raw * P.raw + goods * P.goods + commerce;
+    prodValue = food * P.food + raw * P.raw + goods * P.goods + commerce + trade;
     const corpTax = prodValue * eco.taxCorp * 0.6;
     let tourism = 0;
     const airports = Math.min(3, G.blds.filter(b => b.b === 17 && b.conn).length);
     for (const c of G.cities) {
       const st = S.STYLES[c.style];
-      const sec = 0.7 + 0.3 * eco.budget.security;
-      c.tourism = (c.pop / 1000 * 0.22 * st.tourism * (1 + c.nature * 0.6) + Math.min(2, c.monu) * 9 * (G.meta.gov === 'monarchie' ? 1.5 : 1)) * sec;
+      const sv = c.svc || {};
+      const sec = 0.7 + 0.3 * eco.budget.security + Math.min(1, sv.police || 0) * 0.1;
+      c.tourism = (c.pop / 1000 * 0.22 * st.tourism * (1 + c.nature * 0.6) + Math.min(2, c.monu) * 9 * (G.meta.gov === 'monarchie' ? 1.5 : 1)
+        + Math.min(3, sv.museum || 0) * 6 * (0.5 + st.tourism)) * sec * (1 + 0.3 * Math.min(3, sv.hotel || 0));
       tourism += c.tourism;
     }
     tourism *= (1 + airports * 0.25) * (1 + S.mod(G, 'tourism'));
@@ -752,7 +773,9 @@
     // --- Bildung entwickelt sich langsam
     let eduT = 0, wpop = 0;
     for (const c of G.cities) {
-      c.edu = S.clamp(0.6 * bu.edu + 0.5 * Math.min(1, c.uni * 25000 / Math.max(1500, c.pop)), 0, 1.3);
+      const sv = c.svc || {};
+      c.edu = S.clamp(0.6 * bu.edu + 0.5 * Math.min(1, c.uni * 25000 / Math.max(1500, c.pop))
+        + 0.3 * Math.min(1, (sv.school || 0) * 9000 / Math.max(1500, c.pop)) + 0.04 * Math.min(2, sv.museum || 0), 0, 1.3);
       c.health = S.clamp(0.6 * bu.health + 0.5 * Math.min(1, c.hosp * 20000 / Math.max(1500, c.pop)), 0, 1.3);
       eduT += c.edu * c.pop; wpop += c.pop;
     }
@@ -767,13 +790,14 @@
     for (const c of G.cities) {
       const st = S.STYLES[c.style];
       const mon = G.meta.gov === 'monarchie' ? 1.5 : 1;
+      const sv = c.svc || {}, cov = (n, per) => Math.min(1, (n || 0) * per / Math.max(3000, c.pop));
       const hc = {
         'Grundstimmung': 61 + I.expect,
         'Regierungsform': gov.happy,
         'Stadtstil': st.happy,
         'Bildung': (c.edu - 0.7) * 14,
         'Gesundheit': (c.health - 0.7) * 20,
-        'Sicherheit': (bu.security - 1) * 8,
+        'Sicherheit': (bu.security - 1) * 8 + cov(sv.police, 15000) * 5 + cov(sv.fire, 20000) * 3,
         'Infrastruktur': (bu.infra - 1) * 6,
         'Steuern': -(Math.max(0, eco.taxInc - 0.15) * 110 + Math.max(0, eco.taxCorp - 0.22) * 25),
         'Arbeitslosigkeit': -unemp * 55,
@@ -782,7 +806,8 @@
         'Nahrungsmangel': -Math.min(1, foodShort) * 45,
         'Natur & Parks': c.nature * 8 + Math.min(6, c.parks * 1.5),
         'Stadion & Wahrzeichen': Math.min(10, c.stad * 6 + c.monu * 4 * mon),
-        'Verkehrsanbindung': (c.connected ? 0 : -6) + (c.rail ? 2 : 0),
+        'Freizeit': Math.min(8, (sv.leisure || 0) * 3 + (sv.mall || 0) * 2.5 + Math.min(2, sv.museum || 0)),
+        'Verkehrsanbindung': (c.connected ? 0 : -6) + (c.rail ? 2 : 0) + Math.min(1, sv.station || 0) * 3 + cov(sv.bus, 15000) * 2,
         'Wohnungsnot': -Math.max(0, c.pop / Math.max(1, c.cap) - 1) * 60 * S.lawv(G, 'housing', 'shortage', 1),
         'Krieg': S.Mil ? -S.Mil.weariness(G) : 0,
         'Gesetze': lawHappy,
@@ -840,7 +865,8 @@
     let built = false;
     for (const c of G.cities) {
       if (!c.cap && !c.tiles) continue;
-      const attract = (c.happy - 55) / 45 + (employment - 0.92) * 3 + (c.connected ? 0.1 : -0.4) + (c.rail ? 0.15 : 0) + Math.min(1, c.airport || 0) * 0.15;
+      const attract = (c.happy - 55) / 45 + (employment - 0.92) * 3 + (c.connected ? 0.1 : -0.4) + (c.rail ? 0.15 : 0) + Math.min(1, c.airport || 0) * 0.15
+        + (c.svc ? Math.min(1, c.svc.station || 0) * 0.12 + Math.min(1, c.svc.bus || 0) * 0.05 : 0);
       const natural = (0.0009 + 0.0009 * (c.health || 0.6)) * natMul - Math.min(1, foodShort) * 0.01;
       const young = c.isNew && G.month - c.founded < 48 && c.happy > 40 ? 0.06 : 0;
       // freie Wohnungen ziehen Menschen an, solange die Stadt nicht unbeliebt ist
@@ -1093,7 +1119,7 @@
         const c = randomOf(G.cities.filter(c => S.countAround(G, c.x, c.y, 8, n => G.t.elev[n] >= S.HILL_E) > 10));
         return {
           title: 'Erdbeben bei ' + c.name, text: 'Die Erde hat gebebt. Mehrere Hochhäuser sind beschädigt.', focus: [c.x, c.y],
-          choices: [{ label: 'Wiederaufbau (180 Mio. T)', fx: (G) => { G.eco.money -= 180; } },
+          choices: [{ label: 'Wiederaufbau (' + (G.blds.some(b => b.b === 37) ? 120 : 180) + ' Mio. T)', fx: (G) => { G.eco.money -= G.blds.some(b => b.b === 37) ? 120 : 180; } },
             { label: 'Beschädigte Häuser abreißen', fx: (G) => {
               const t = G.t;
               for (let y = c.y - 4; y <= c.y + 4; y++) for (let x = c.x - 4; x <= c.x + 4; x++) {
@@ -1111,9 +1137,12 @@
       make: (G) => {
         const cand = homeTiles(G, i => G.t.forest[i] && G.t.moist[i] < 0.5);
         const id = randomOf(cand), x0 = id % G.W, y0 = (id / G.W) | 0;
+        const fw = G.blds.some(b => b.b === 37 && b.conn);
         return {
-          title: 'Waldbrand', text: 'Ein großer Waldbrand wütet. Mehrere Quadratkilometer Wald sind verloren.', focus: [x0, y0],
-          choices: [{ label: 'Löschflugzeuge einsetzen (80 Mio. T)', fx: (G) => { G.eco.money -= 80; burn(G, x0, y0, 1); } },
+          title: 'Waldbrand', text: 'Ein großer Waldbrand wütet.' + (fw ? ' Deine Feuerwehr ist schon unterwegs.' : ' Mehrere Quadratkilometer Wald sind verloren.'), focus: [x0, y0],
+          choices: fw ? [{ label: 'Die Feuerwehr übernimmt (30 Mio. T)', fx: (G) => { G.eco.money -= 30; burn(G, x0, y0, 0); } },
+            { label: 'Ausbrennen lassen', fx: (G) => burn(G, x0, y0, 2) }]
+            : [{ label: 'Löschflugzeuge einsetzen (80 Mio. T)', fx: (G) => { G.eco.money -= 80; burn(G, x0, y0, 1); } },
             { label: 'Ausbrennen lassen', fx: (G) => burn(G, x0, y0, 3) }]
         };
       }

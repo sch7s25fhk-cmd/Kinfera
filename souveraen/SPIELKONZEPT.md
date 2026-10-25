@@ -39,6 +39,18 @@ Ab dann gehört die Stadt dir: Du bist für Infrastruktur, Wirtschaft, Energie, 
 | **Dienste** | Universitäten, Krankenhäuser, Parks, Stadien, Wahrzeichen | Wirken im Umkreis. Das Bildungsniveau steigt langsam und hebt Löhne und Erträge. |
 | **Gesetze** | Wohnungsbau, Zuwanderung, Familienpolitik, Umweltauflagen, Wehrdienst, Rüstungsetat, Ausbildung, Kriegspropaganda, Soldatenfürsorge | Du regierst durch Entscheidungen statt Einzelbefehle. Jedes Gesetz hat mehrere Stufen mit Kosten und Wirkungen und lässt sich alle zwei Monate ändern (Tab „Gesetze“). |
 
+### 2.1c Gebäude der Erweiterung
+
+| Bereich | Gebäude | Wirkung |
+|---|---|---|
+| **Betriebe** | Gewächshaus, Technologiepark, Einkaufszentrum, Hotel | Nahrung unabhängig vom Boden (braucht Strom) · hochwertige Güter ohne Rohstoffe, Ertrag wächst mit der Bildung · Handelsumsatz, Jobs und Freizeit · +30 % Tourismus je Hotel (bis drei) |
+| **Energie** | Gaskraftwerk, Geothermie, Biogasanlage | 80 MW, halb so schmutzig wie Kohle · 60 MW sauber, nur auf Hügeln · 20 MW plus 8 MW je Bauernhof in der Nähe |
+| **Soziales** | Schule, Schwimmbad, Museum | Grundbildung im Umkreis (günstiger als die Universität) · Freizeit · Tourismus (in historischen Städten am stärksten) und etwas Bildung |
+| **Dienste & Umwelt** | Polizeiwache, Feuerwache, Kläranlage, Recyclinghof | Sicherheit und Tourismus · Brandschutz, mildert Waldbrände und Erdbebenschäden · senkt die Verschmutzung stark (am Wasser) · weniger Verschmutzung plus Rohstoffe |
+| **Verkehr** | Bahnhof, Busbahnhof | an einer Bahnstrecke: schnelleres Wachstum, bessere Anbindung · bessere Anbindung der Viertel |
+
+Dienste wirken auf alle Städte und Ortsteile im Umkreis; die Bauvorschau zeigt den Radius und wie viele Städte erreicht werden. Schule, Polizei, Feuerwehr und Busse decken je nach Größe der Stadt nur einen Teil ab – große Städte brauchen mehrere. Neuer Zufriedenheitsfaktor: **Freizeit** (Schwimmbad, Einkaufszentrum, Museum).
+
 ### 2.1a Städte wachsen von selbst
 - Jeden Spieltag wächst jede Stadt ein Stück: Geburten (Gesundheit, Familienpolitik), Zuzug (Zufriedenheit, Arbeit, Anbindung, Zuwanderungsgesetz) und Bauträger, die bei Wohnungsmangel und bei guten Aussichten neue Häuser, Läden und Betriebe errichten (Bauförderung und sozialer Wohnungsbau beschleunigen das).
 - Strommangel, Unzufriedenheit und fehlende Arbeit bremsen das Wachstum; das Stadt-Panel zeigt Wachstum pro Monat, Neubauten und die Gründe.
@@ -202,6 +214,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/ui.js` | Werkzeuge, Panels, Dialoge, Maus- und Touch-Steuerung |
 | `js/main.js` | Start, Spielschleife, Speichern |
 | `tools/build_data.py` | Erzeugt `world.js` aus Natural-Earth-GeoJSON |
+| `tools/buildtest.js` | Alle Gebäude der Erweiterung bauen und ihre Wirkung prüfen |
 | `tools/citytest.js` | Stadt an Koordinaten gründen und zwei Jahre simulieren (ohne Browser) |
 | `tools/simtest.js` | Testlauf der Simulation ohne Browser |
 | `tools/build_single.py` | Baut eine einzelne HTML-Datei zum Teilen |

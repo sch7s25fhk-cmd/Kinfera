@@ -638,9 +638,12 @@
       if (o.raw) parts.push(S.fmt1(o.raw) + ' Rohstoffe');
       if (o.goods) parts.push(S.fmt1(o.goods) + ' Güter');
       if (o.energy) parts.push(Math.round(o.energy) + ' MW');
+      if (o.value) parts.push(S.fmt1(o.value) + ' Mio. T Umsatz');
+      const served = def.svc ? G.cities.filter(c => Math.hypot(c.x - x, c.y - y) <= def.r + Math.sqrt(c.tiles || 1) * 0.5) : [];
       h += '<h4>' + esc(def.name) + '</h4><p class="muted">' + esc(def.desc) + '</p><div class="kv">' +
         (parts.length ? '<span>Leistung (voll besetzt)</span><span>' + parts.join(', ') + '</span>' : '') +
         (o.rawUse ? '<span>Verbrauch</span><span>' + S.fmt1(o.rawUse) + ' Rohstoffe</span>' : '') +
+        (def.svc ? '<span>Versorgt</span><span>' + (served.length ? esc(served.map(c => c.name).join(', ')) : 'keine Stadt im Umkreis') + '</span>' : '') +
         '<span>Arbeitsplätze</span><span>' + S.fmtPop(def.jobs * G.popScale) + '</span>' +
         (def.energy ? '<span>Strombedarf</span><span>' + def.energy + ' MW</span>' : '') +
         '<span>Unterhalt</span><span>' + S.fmtMoney(def.upkeep) + '/Mon.</span>' +
@@ -1236,7 +1239,7 @@
       const [x, y] = p.at;
       if (tool.kind === 'build') {
         const r = S.canPlace(G, tool.bld, x, y);
-        const radius = tool.bld === 30 || tool.bld === 31 ? S.SERVICE_RADIUS : tool.bld === 33 || tool.bld === 34 ? 10 : 0;
+        const radius = S.BLD[tool.bld].svc ? S.BLD[tool.bld].r : tool.bld === 30 || tool.bld === 31 ? S.SERVICE_RADIUS : tool.bld === 33 || tool.bld === 34 ? 10 : 0;
         R.preview = { tiles: [{ x, y, ok: r.ok }], radius };
         if (r.ok) {
           const o = S.buildingOutput(G, { x, y, b: tool.bld });
@@ -1245,6 +1248,9 @@
           if (o.raw) parts.push(S.fmt1(o.raw) + ' Rohstoffe');
           if (o.goods) parts.push(S.fmt1(o.goods) + ' Güter');
           if (o.energy) parts.push(Math.round(o.energy) + ' MW');
+          if (o.value) parts.push(S.fmt1(o.value) + ' Mio. T Umsatz');
+          const sd = S.BLD[tool.bld];
+          if (sd.svc) { const n = G.cities.filter(c => Math.hypot(c.x - x, c.y - y) <= sd.r + Math.sqrt(c.tiles || 1) * 0.5).length; parts.push(n ? 'wirkt auf ' + n + (n === 1 ? ' Stadt' : ' Städte') : 'keine Stadt im Umkreis'); }
           const road = S.countAround(G, x, y, 2, n => G.t.road[n] || S.isUrban(G.t.bld[n]));
           info = '<b>' + S.fmtMoney(tool.cost) + '</b>' + (parts.length ? ' · Ertrag hier: ' + parts.join(', ') : '') + (road ? '' : '<br><span class="warn">Keine Straße in der Nähe – nur 40 % Leistung</span>');
           okBtn = 'Bauen'; okEnabled = G.eco.money >= tool.cost;
@@ -1450,6 +1456,7 @@
       '<p><b>Gemeinsame Welt.</b> Jede Spielerin und jeder Spieler besitzt genau eine Stadt. Zoomst du bis zum Globus heraus, siehst du die Städte der anderen mit Namen und Einwohnerzahl. Es gibt keine Länder und keine Kriege – nur Nachbarn.</p>' +
       '<p><b>Wirtschaft.</b> Bauernhöfe und Fischereien liefern Nahrung, Bergwerke, Sägewerke und Ölpumpen Rohstoffe, Fabriken machen daraus Güter. Überschüsse werden verkauft, Mängel teuer eingekauft.</p>' +
       '<p><b>Strom.</b> Ohne genug Kraftwerke stockt die Industrie und die Stadt wächst nicht in die Höhe.</p>' +
+      '<p><b>Dienste.</b> Schulen, Polizei, Feuerwehr, Busbahnhöfe, Schwimmbäder und Museen wirken auf die Viertel im Umkreis (die Bauvorschau zeigt den Radius). Große Städte brauchen mehrere davon. Kläranlage und Recyclinghof senken die Verschmutzung, ein Bahnhof an der Bahnstrecke lässt die Stadt schneller wachsen.</p>' +
       '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zur Stadt führt. Ortsteile ohne Verbindung zum Zentrum sind unzufrieden.</p>' +
       '<p><b>Stadt formen.</b> Die Stadt wächst von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe. Mit „Stadt gründen“ legst du weitere Ortsteile an.</p>' +
       '<p><b>Satzungen.</b> Im Tab „Gesetze“ entscheidest du: Bauförderung und sozialer Wohnungsbau lassen die Stadt schneller wachsen, Zuwanderung und Familienpolitik bringen Menschen, Umweltauflagen tauschen saubere Luft gegen Industrie.</p>' +

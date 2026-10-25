@@ -140,7 +140,40 @@
     19: { key: 'fort', name: 'Festung', cost: 180, upkeep: 1.5, jobs: 10, energy: 1, poll: 0, cat: 'militaer',
       desc: 'Bunker und Gräben: Eigene Truppen auf diesem Feld verteidigen fast doppelt so stark.' },
     34: { key: 'monument', name: 'Wahrzeichen', cost: 900, upkeep: 2, jobs: 15, energy: 1, poll: 0, cat: 'gesellschaft',
-      desc: 'Prägt das Stadtbild im Stil der Stadt. Tourismus und Nationalstolz.' }
+      desc: 'Prägt das Stadtbild im Stil der Stadt. Tourismus und Nationalstolz.' },
+    // --- Erweiterung: mehr Baumöglichkeiten. svc = Dienst für Städte im Umkreis r (Felder)
+    25: { key: 'gas', name: 'Gaskraftwerk', cost: 220, upkeep: 2, jobs: 30, energy: 0, poll: 0.25, cat: 'energie',
+      desc: 'Liefert 80 MW, schnell gebaut und halb so schmutzig wie Kohle. Verbraucht etwas Rohstoffe.' },
+    26: { key: 'geo', name: 'Geothermie', cost: 380, upkeep: 1.5, jobs: 15, energy: 0, poll: 0, cat: 'energie',
+      desc: 'Erdwärme: 60 MW sauberer Strom rund um die Uhr. Nur auf Hügeln oder im Bergland.' },
+    27: { key: 'biogas', name: 'Biogasanlage', cost: 120, upkeep: 0.8, jobs: 12, energy: 0, poll: 0.05, cat: 'energie',
+      desc: 'Strom aus Gülle und Ernteresten: 20 MW plus 8 MW je Bauernhof in der Nähe.' },
+    35: { key: 'school', name: 'Schule', cost: 120, upkeep: 1.5, jobs: 40, energy: 2, poll: 0, cat: 'gesellschaft', svc: 'school', r: 8,
+      desc: 'Grundbildung für die Viertel ringsum. Günstiger als eine Universität, wirkt aber nur in der Nähe.' },
+    36: { key: 'police', name: 'Polizeiwache', cost: 160, upkeep: 2, jobs: 45, energy: 2, poll: 0, cat: 'dienste', svc: 'police', r: 10,
+      desc: 'Mehr Sicherheit im Umkreis: zufriedenere Menschen und mehr Touristen.' },
+    37: { key: 'fire', name: 'Feuerwache', cost: 140, upkeep: 1.8, jobs: 35, energy: 1.5, poll: 0, cat: 'dienste', svc: 'fire', r: 10,
+      desc: 'Schutz vor Bränden: beruhigt die Nachbarschaft und mildert Brand- und Unwetterschäden.' },
+    38: { key: 'pool', name: 'Schwimmbad', cost: 200, upkeep: 1.5, jobs: 20, energy: 3, poll: 0, cat: 'gesellschaft', svc: 'leisure', r: 10,
+      desc: 'Freibad mit Liegewiese. Mehr Freizeit, mehr Zufriedenheit im Umkreis.' },
+    39: { key: 'museum', name: 'Museum', cost: 380, upkeep: 2, jobs: 30, energy: 2, poll: 0, cat: 'gesellschaft', svc: 'museum', r: 12,
+      desc: 'Lockt Touristen an und hebt die Bildung ein wenig. Wirkt in historischen Städten am stärksten.' },
+    40: { key: 'greenhouse', name: 'Gewächshaus', cost: 110, upkeep: 1, jobs: 30, energy: 4, poll: 0.01, cat: 'wirtschaft',
+      desc: 'Gemüse unter Glas: Nahrung unabhängig von Boden und Klima, braucht aber Strom.' },
+    41: { key: 'techpark', name: 'Technologiepark', cost: 650, upkeep: 4, jobs: 180, energy: 10, poll: 0, cat: 'wirtschaft',
+      desc: 'Labore und Büros: hochwertige Güter ohne Rohstoffe. Je gebildeter die Stadt, desto mehr Ertrag.' },
+    42: { key: 'mall', name: 'Einkaufszentrum', cost: 420, upkeep: 2.5, jobs: 140, energy: 6, poll: 0.03, cat: 'wirtschaft', svc: 'mall', r: 10,
+      desc: 'Viele Jobs im Handel, Steuern und ein Plus an Freizeit für die Stadt.' },
+    43: { key: 'hotel', name: 'Hotel', cost: 300, upkeep: 1.5, jobs: 60, energy: 3, poll: 0, cat: 'wirtschaft', svc: 'hotel', r: 12,
+      desc: 'Betten für Gäste: +30 % Tourismus in der Stadt (bis zu drei Hotels).' },
+    46: { key: 'water', name: 'Kläranlage', cost: 260, upkeep: 2, jobs: 25, energy: 3, poll: -0.6, cat: 'dienste',
+      desc: 'Reinigt Abwasser und senkt die Verschmutzung im weiten Umkreis deutlich. Muss am Wasser liegen.' },
+    47: { key: 'recycling', name: 'Recyclinghof', cost: 180, upkeep: 1.2, jobs: 30, energy: 2, poll: -0.3, cat: 'dienste',
+      desc: 'Weniger Müll, sauberere Luft und ein paar Rohstoffe aus Altmaterial.' },
+    48: { key: 'station', name: 'Bahnhof', cost: 250, upkeep: 2, jobs: 30, energy: 2, poll: 0, cat: 'verkehr', svc: 'station', r: 8,
+      desc: 'Halt für die Bahn: Die Stadt wächst schneller und ist besser angebunden. Muss an einer Bahnstrecke liegen.' },
+    49: { key: 'bus', name: 'Busbahnhof', cost: 90, upkeep: 1, jobs: 20, energy: 1, poll: 0.01, cat: 'verkehr', svc: 'bus', r: 8,
+      desc: 'Busse verbinden die Viertel: bessere Anbindung und etwas weniger Verkehr.' }
   };
   S.BLD_BY_KEY = {};
   for (const id in S.BLD) { S.BLD[id].id = +id; S.BLD_BY_KEY[S.BLD[id].key] = +id; }
@@ -154,6 +187,8 @@
     { key: 'verkehr', name: 'Verkehr', tools: [
       { id: 'road', name: 'Straße', kind: 'road', cost: 2, desc: 'Ziehen, um eine Straße zu bauen. Über Wasser entsteht eine Brücke (×5).' },
       { id: 'rail', name: 'Bahnstrecke', kind: 'rail', cost: 6, desc: 'Verbindet Städte schnell. Per Bahn angebundene Städte wachsen schneller.' },
+      { id: 'b48', bld: 48, kind: 'build' },
+      { id: 'b49', bld: 49, kind: 'build' },
       { id: 'bulldoze', name: 'Abriss', kind: 'bulldoze', cost: 1, desc: 'Entfernt Straßen, Gebäude, Zonen und Stadtkacheln.' }
     ] },
     { key: 'staedte', name: 'Städte', tools: [
@@ -163,9 +198,10 @@
       { id: 'zone3', name: 'Industriezone', kind: 'zone', zone: 3, cost: 1, desc: 'Werkhallen: viele Jobs, produziert Güter, verschmutzt.' },
       { id: 'zone4', name: 'Grüngürtel', kind: 'zone', zone: 4, cost: 1, desc: 'Schützt Land vor Bebauung. Lenkt das Wachstum.' }
     ] },
-    { key: 'wirtschaft', name: 'Wirtschaft', short: 'Betriebe', tools: [10, 11, 12, 13, 14, 15, 16, 17].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
-    { key: 'energie', name: 'Energie', tools: [20, 21, 22, 23, 24].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
-    { key: 'gesellschaft', name: 'Gesellschaft', short: 'Soziales', tools: [30, 31, 32, 33, 34].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'wirtschaft', name: 'Wirtschaft', short: 'Betriebe', tools: [10, 40, 11, 12, 13, 14, 15, 41, 42, 43, 16, 17].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'energie', name: 'Energie', tools: [21, 22, 27, 26, 23, 25, 20, 24].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'gesellschaft', name: 'Gesellschaft', short: 'Soziales', tools: [35, 30, 31, 32, 38, 39, 33, 34].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
+    { key: 'dienste', name: 'Dienste & Umwelt', short: 'Dienste', tools: [36, 37, 46, 47].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'militaer', name: 'Militär', tools: [18, 19].map(id => ({ id: 'b' + id, bld: id, kind: 'build' })) },
     { key: 'landschaft', name: 'Landschaft', short: 'Gelände', tools: [
       { id: 't_raise', name: 'Anheben', kind: 'terra', op: 'raise', cost: 6, desc: 'Hebt das Gelände an. Aus Wasser wird Land, aus Hügeln Berge.' },

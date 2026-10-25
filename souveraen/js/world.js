@@ -21,6 +21,7 @@
   /** Weltparameter für ein Spiel: WT = Felder rund um den Äquator */
   Wd.setup = function (p) {
     Wd.WT = p.WT; Wd.seed = p.seed; Wd.sc = p.sc; Wd.home = p.home;
+    Wd.city = !!p.city;   // Stadtmodus: keine Länder, jedes Land ist bebaubar, keine fremden Städte
     const s = p.seed;
     Wd.nE = S.makeNoise(s + 11); Wd.nR = S.makeNoise(s + 23); Wd.nM = S.makeNoise(s + 37); Wd.nX = S.makeNoise(s + 51);
     Wd.nL = S.makeNoise(s + 71); Wd.nRes = S.makeNoise(s + 91); Wd.nF = S.makeNoise(s + 101);
@@ -174,7 +175,7 @@
         const id = j * w + i;
         const o = own[(j + P) * ww + i + P];
         t.owner[id] = o;
-        t.region[id] = o === 0 ? 0 : o === Wd.homeIdx ? 1 : 2;
+        t.region[id] = o === 0 ? 0 : (Wd.city || o === Wd.homeIdx) ? 1 : 2;
         const lon = Wd.lonOfGx(gx + 0.5);
         // Nachbarschaft im feinen Raster (Küste)
         let seaN = 0, landN = 0;
@@ -217,9 +218,65 @@
     return t;
   };
 
+  /**
+   * Grobes Gelände eines großen Ausschnitts für die Zwischenzoomstufen: jede Probe steht für step × step Felder.
+   * Liefert ein Block-Objekt, das sich wie ein Kartenblock einfärben lässt.
+   */
+  Wd.sampleBlock = function (gx0, gy0, w, h, step) {
+    const P = 1, ww = w + 2 * P, hh = h + 2 * P;
+    const own = new Uint8Array(ww * hh), o16 = new Uint16Array(ww * hh);
+    // Länderraster in grober Auflösung: Weltbreite vorübergehend auf WT/step setzen
+    const WT = Wd.WT;
+    Wd.WT = WT / step;
+    try { rasterOwner(o16, gx0 / step - P, gy0 / step - P, ww, hh); } finally { Wd.WT = WT; }
+    for (let i = 0; i < ww * hh; i++) own[i] = o16[i] ? 1 : 0;
+    const n = w * h;
+    const t = { elev: new Float32Array(n), moist: new Float32Array(n), temp: new Float32Array(n), forest: new Float32Array(n), irrig: new Uint8Array(n) };
+    // Merkmale mindestens vier Proben breit, sonst wird das Bild zu Rauschen
+    const sc = Math.min(Wd.sc, 0.25 / step), seed = Wd.seed;
+    const nE = Wd.nE, nR = Wd.nR, nX = Wd.nX, nM = Wd.nM, nF = Wd.nF;
+    for (let j = 0; j < h; j++) {
+      const gy = gy0 + (j + 0.5) * step;
+      const lat = Wd.latOfGy(gy), alat = Math.abs(lat);
+      const tb = S.clamp(1.0 - Math.pow(alat / 80, 1.6), 0, 1);
+      const dry = 0.46 * Math.exp(-Math.pow((alat - 25) / 9, 2));
+      const wet = 0.18 * Math.exp(-Math.pow(alat / 11, 2));
+      for (let i = 0; i < w; i++) {
+        const gx = Wd.wrapGx(gx0 + (i + 0.5) * step), id = j * w + i;
+        const o = own[(j + P) * ww + i + P];
+        const lon = Wd.lonOfGx(gx);
+        let seaN = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (!own[(j + P + oy) * ww + i + P + ox]) seaN++;
+        const base = S.fbm(nE, gx * sc, gy * sc, 4);
+        let e;
+        const dsk = o ? Wd.distSeaKm(lon, lat) : 0;
+        if (o) {
+          const ridge = 1 - Math.abs(S.fbm(nR, gx * sc * 0.9 + 40, gy * sc * 0.9, 3) * 2 - 1);
+          const mzone = S.clamp((S.fbm(nX, gx * sc * 0.45, gy * sc * 0.45, 2) - 0.54) * 3.2, 0, 1);
+          e = 0.03 + (base - 0.38) * 0.7 + Math.pow(ridge, 3) * mzone * 0.95 + Math.min(1, dsk / 400) * 0.12;
+          e = Math.min(1.25, Math.max(seaN ? 0.02 : 0.05, e));
+        } else {
+          e = -0.03 - Math.min(1, Wd.distLandKm(lon, lat) / 140) * 0.4 + (base - 0.5) * 0.08;
+          if (seaN < 9) e = Math.max(e, -0.045);
+        }
+        t.elev[id] = e;
+        t.temp[id] = tb;
+        const coast = Math.max(0, 1 - dsk / 500) * 0.18, cont = Math.min(1, dsk / 1600) * 0.22;
+        t.moist[id] = S.clamp(0.25 + S.fbm(nM, gx * sc * 1.2, gy * sc * 1.2, 3) * 0.55 - dry + wet + coast - cont, 0, 1);
+        if (o && e >= 0) {
+          const tt = tb - Math.max(0, e - 0.4) * 0.5;
+          const f = S.fbm(nF, gx * sc * 2, gy * sc * 2, 2) + t.moist[id] * 0.55 - 0.35;
+          if (e < S.MOUNTAIN_E && tt > 0.12 && t.moist[id] > 0.45) t.forest[id] = S.clamp((f - 0.5) * 7, 0, 1);
+        }
+      }
+    }
+    return { W: w, H: h, t, gx0: gx0 / step, gy0: gy0 / step, meta: { seed } };
+  };
+
   // ---------------- Städte der Welt (fremde Länder) ----------------
   function buildCityTable() {
     const list = [];
+    if (Wd.city) { Wd.cities = list; Wd.cityGrid = new Map(); return; }
     S.WORLD.forEach((c, ci) => {
       for (const p of (c.pl || [])) {
         const gx = Wd.wrapGx(Wd.gxOf(p[1])), gy = Wd.gyOf(p[2]);

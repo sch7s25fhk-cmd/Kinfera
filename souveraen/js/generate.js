@@ -135,45 +135,15 @@
     t.biome[i] = S.biomeOf(t.elev[i], t.moist[i], t.temp[i], t.forest[i], t.irrig[i]);
   };
 
-  /** Hauptfunktion: erzeugt den kompletten Spielzustand für ein Land */
-  S.generateCountry = function (country, opts) {
-    opts = opts || {};
-    const seed = S.hashStr(country.id + ':' + (opts.seed || 1));
-    const rnd = S.rng(seed);
-    const { rings, box } = S.selectRings(country);
-    const midLat = (box.y0 + box.y1) / 2;
-    const k = Math.cos(midLat * Math.PI / 180);
-    const wDeg0 = box.x1 - box.x0, hDeg0 = box.y1 - box.y0;
-    const pad = Math.max(0.12, Math.max(wDeg0 * k, hDeg0) * 0.07);
-    const lon0 = box.x0 - pad / k, lon1 = box.x1 + pad / k, lat0 = Math.max(-84, box.y0 - pad), lat1 = Math.min(84, box.y1 + pad);
-    const areaDeg = rings.reduce((s, r) => s + r.area, 0);
-    const longest = Math.round(S.clamp(100 + Math.sqrt(areaDeg) * 9, 120, 192));
-    // Weltauflösung so wählen, dass das Kernland etwa `longest` Felder misst (Mercator: quadratische Felder)
-    const spanX = (lon1 - lon0) / 360, spanY = (S.World.mercY(lat1) - S.World.mercY(lat0)) / (2 * Math.PI);
-    const WT = Math.round(longest / Math.max(spanX, spanY));
-    const kmMid = 40075 * k / WT;
-    const sc = S.clamp(kmMid / 260, 0.055, 0.16);
-    S.World.setup({ WT, seed, sc, home: country.id });
-    const gx0 = Math.floor(S.World.gxOf(lon0)), gx1 = Math.ceil(S.World.gxOf(lon1));
-    const gy0 = Math.floor(S.World.gyOf(lat1)), gy1 = Math.ceil(S.World.gyOf(lat0));
-    const W = gx1 - gx0, H = gy1 - gy0;
+  /** Flüsse: von Quellen im Bergland bergab bis ins Meer; Täler graben, Feuchte am Ufer */
+  function makeRivers(t, W, H, rnd, seed, nRivers, isLand) {
     const N = W * H;
-    const kmPerTile = kmMid;
-
-    // 1) Gelände, Klima, Wald, Rohstoffe und Grenzen aus der Weltfunktion
-    const t = S.World.tileBlock(gx0, gy0, W, H);
-    let homeCount = 0;
-    for (let i = 0; i < N; i++) if (t.region[i] === 1) homeCount++;
-    if (homeCount < 30) throw new Error('Land zu klein');
-    const isLand = (i) => t.region[i] !== 0;
     const dSea = distField(W, H, i => !isLand(i));
-
     // 4) Flüsse: von Quellen im Bergland bergab bis ins Meer
     const isW = (id) => t.elev[id] < 0;
     const sources = [];
     for (let id = 0; id < N; id++) if (isLand(id) && t.elev[id] > 0.4 && t.moist[id] > 0.42 && !isW(id)) sources.push(id);
     sources.sort(() => rnd() - 0.5);
-    const nRivers = Math.max(2, Math.round(homeCount / 380));
     let made = 0;
     for (const src of sources) {
       if (made >= nRivers) break;
@@ -223,6 +193,41 @@
     const dRiver = distField(W, H, i => t.river[i] === 1);
     for (let id = 0; id < N; id++) if (dRiver[id] <= 2) t.moist[id] = Math.min(1, t.moist[id] + 0.12 - dRiver[id] * 0.04);
 
+  }
+
+  /** Hauptfunktion: erzeugt den kompletten Spielzustand für ein Land */
+  S.generateCountry = function (country, opts) {
+    opts = opts || {};
+    const seed = S.hashStr(country.id + ':' + (opts.seed || 1));
+    const rnd = S.rng(seed);
+    const { rings, box } = S.selectRings(country);
+    const midLat = (box.y0 + box.y1) / 2;
+    const k = Math.cos(midLat * Math.PI / 180);
+    const wDeg0 = box.x1 - box.x0, hDeg0 = box.y1 - box.y0;
+    const pad = Math.max(0.12, Math.max(wDeg0 * k, hDeg0) * 0.07);
+    const lon0 = box.x0 - pad / k, lon1 = box.x1 + pad / k, lat0 = Math.max(-84, box.y0 - pad), lat1 = Math.min(84, box.y1 + pad);
+    const areaDeg = rings.reduce((s, r) => s + r.area, 0);
+    const longest = Math.round(S.clamp(100 + Math.sqrt(areaDeg) * 9, 120, 192));
+    // Weltauflösung so wählen, dass das Kernland etwa `longest` Felder misst (Mercator: quadratische Felder)
+    const spanX = (lon1 - lon0) / 360, spanY = (S.World.mercY(lat1) - S.World.mercY(lat0)) / (2 * Math.PI);
+    const WT = Math.round(longest / Math.max(spanX, spanY));
+    const kmMid = 40075 * k / WT;
+    const sc = S.clamp(kmMid / 260, 0.055, 0.16);
+    S.World.setup({ WT, seed, sc, home: country.id });
+    const gx0 = Math.floor(S.World.gxOf(lon0)), gx1 = Math.ceil(S.World.gxOf(lon1));
+    const gy0 = Math.floor(S.World.gyOf(lat1)), gy1 = Math.ceil(S.World.gyOf(lat0));
+    const W = gx1 - gx0, H = gy1 - gy0;
+    const N = W * H;
+    const kmPerTile = kmMid;
+
+    // 1) Gelände, Klima, Wald, Rohstoffe und Grenzen aus der Weltfunktion
+    const t = S.World.tileBlock(gx0, gy0, W, H);
+    let homeCount = 0;
+    for (let i = 0; i < N; i++) if (t.region[i] === 1) homeCount++;
+    if (homeCount < 30) throw new Error('Land zu klein');
+    const isLand = (i) => t.region[i] !== 0;
+    makeRivers(t, W, H, rnd, seed, Math.max(2, Math.round(homeCount / 380)), isLand);
+
     // 5) Landschaft nach den Flüssen neu bestimmen
     for (let id = 0; id < N; id++) S.updateBiome({ t }, id);
 
@@ -238,6 +243,102 @@
       flags: { over: false, sandbox: false }, popScale: 1, cam: null, homeCount
     };
     seedCities(G, country, rnd);
+    return G;
+  };
+
+  // ======================= Stadtmodus =======================
+  S.CITY_KM = 0.25;     // Kantenlänge eines Feldes in km
+  S.CITY_GRID = 128;    // Felder pro Seite um den Gründungsort (32 km)
+
+  /** Liegt ein Punkt auf Land? (Umrisse der Erde, unabhängig von Ländergrenzen) */
+  S.landAt = function (lon, lat) {
+    for (const c of S.WORLD) {
+      for (const r of c.r) {
+        // Rohdaten: lon·100, lat·100 abwechselnd
+        let inside = false;
+        const X = lon * 100, Y = lat * 100;
+        for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+          const yi = r[i + 1], yj = r[j + 1];
+          if ((yi > Y) !== (yj > Y) && X < (r[j] - r[i]) * (Y - yi) / (yj - yi) + r[i]) inside = !inside;
+        }
+        if (inside) return true;
+      }
+    }
+    return false;
+  };
+
+  /**
+   * Stadtmodus: Karte um einen echten Ort der Erde (lat/lon), ohne Länder – jedes Stück Land ist bebaubar.
+   * Im Zentrum, so nah wie möglich an den Koordinaten, entsteht die neue Stadt.
+   */
+  S.generateCity = function (opts) {
+    const lat = S.clamp(+opts.lat, -80, 80), lon = ((+opts.lon + 540) % 360) - 180;
+    const seed = S.hashStr('city:' + lat.toFixed(4) + ',' + lon.toFixed(4));
+    const rnd = S.rng(seed);
+    const k = Math.cos(lat * Math.PI / 180);
+    const WT = Math.round(40075 * k / S.CITY_KM);
+    const sc = 0.05;
+    S.World.setup({ WT, seed, sc, home: null, city: true });
+    const W = S.CITY_GRID, H = S.CITY_GRID;
+    const cgx = S.World.gxOf(lon), cgy = S.World.gyOf(lat);
+    const gx0 = Math.floor(cgx - W / 2), gy0 = Math.floor(cgy - H / 2);
+    const t = S.World.tileBlock(gx0, gy0, W, H);
+    let land = 0;
+    for (let i = 0; i < W * H; i++) if (t.region[i] === 1) land++;
+    if (land < 150) throw new Error('Hier ist kein Land');
+    const isLand = (i) => t.region[i] !== 0;
+    makeRivers(t, W, H, rnd, seed, Math.max(1, Math.round(land / 2500)), isLand);
+    for (let id = 0; id < W * H; id++) S.updateBiome({ t }, id);
+    const G = {
+      v: 1, mode: 'city',
+      meta: {
+        id: 'CITY', name: opts.name, en: opts.name, inc: 3, realPop: 0, gdp: 0, cont: '',
+        gov: opts.gov || 'demokratie', ruler: opts.ruler || '', seed, lat, lon
+      },
+      W, H, gx0, gy0, world: { WT, seed, sc, home: null, city: true }, kmPerTile: S.CITY_KM, t,
+      cities: [], blds: [],
+      eco: null, stats: [], log: [], month: 0, mods: [], ach: {},
+      flags: { over: false, sandbox: false }, popScale: 1, cityScale: 1, cam: null, homeCount: land
+    };
+    // Bauplatz: das geeignete Feld, das den Koordinaten am nächsten liegt
+    const fx = cgx - gx0 - 0.5, fy = cgy - gy0 - 0.5;
+    let best = null, bd = 1e9;
+    for (let y = 3; y < H - 3; y++) for (let x = 3; x < W - 3; x++) {
+      const id = y * W + x;
+      if (t.region[id] !== 1 || t.elev[id] < 0 || t.elev[id] >= S.MOUNTAIN_E || t.river[id]) continue;
+      const d = Math.hypot(x - fx, y - fy) + t.elev[id] * 2;
+      if (d < bd) { bd = d; best = [x, y]; }
+    }
+    if (!best) throw new Error('Kein Bauplatz');
+    const style = opts.style || 'historisch';
+    const city = S.foundCity(G, best[0], best[1], opts.name, style, opts.layout || 'organisch', true);
+    city.capital = true; city.isNew = true; city.founded = 0;
+    S.growCityInstant(G, city, 7, rnd);
+    // erste Betriebe: Höfe, Strom, Sägewerk
+    const place = (bid, rMin, rMax, scoreFn) => {
+      let b = -1, bs = -1e9;
+      for (let oy = -rMax; oy <= rMax; oy++) for (let ox = -rMax; ox <= rMax; ox++) {
+        const d = Math.abs(ox) + Math.abs(oy);
+        if (d < rMin || d > rMax) continue;
+        const x = city.x + ox, y = city.y + oy;
+        if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1 || !S.canPlace(G, bid, x, y).ok) continue;
+        const sc2 = scoreFn(y * W + x) - d * 0.15 + rnd() * 0.3;
+        if (sc2 > bs) { bs = sc2; b = y * W + x; }
+      }
+      if (b >= 0) { S.placeBuilding(G, bid, b % W, (b / W) | 0, true); S.connectBuildingRoad(G, b % W, (b / W) | 0); }
+    };
+    place(10, 3, 8, (id) => S.tileFertility(G, id));
+    place(10, 3, 8, (id) => S.tileFertility(G, id));
+    place(S.isCoastal(G, city.x, city.y, 6) ? 22 : 21, 3, 8, () => 0);
+    place(12, 2, 9, (id) => (t.forest[id] ? 2 : 0));
+    S.recalcCities(G);
+    city.pop = city.cap * 0.85;
+    G.eco = {
+      money: 600, debt: 0, taxInc: 0.2, taxCorp: 0.18,
+      budget: { edu: 1, health: 1, security: 1, infra: 1 },
+      eduLevel: 0.6, approval: 60, lowMonths: 0, lastElection: 0,
+      last: null, history: []
+    };
     return G;
   };
 

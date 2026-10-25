@@ -746,7 +746,7 @@
       const amt = 1000;
       eco.debt += amt; eco.money += amt;
       eco.rate = Math.min(0.15, (eco.rate || 0.04) + 0.01);
-      S.log(G, 'Die Staatskasse war leer: Notkredit über 1.000 Mio. T aufgenommen. Der Zins steigt.', 'bad');
+      S.log(G, 'Die Stadtkasse war leer: Notkredit über 1.000 Mio. T aufgenommen. Der Zins steigt.', 'bad');
     }
 
     // --- Bildung entwickelt sich langsam
@@ -916,13 +916,17 @@
     }
     S.tick(G);
     S.tick(G);
-    const target = 30 + G.meta.inc * 3;
+    const city = G.mode === 'city';
+    const target = city ? 8 : 30 + G.meta.inc * 3;   // eine junge Stadt bekommt nur einen kleinen Zuschuss
     eco.baseRate = (target - eco.last.net) / Math.max(1, eco.last.pop / 1000);
     let gamePop = 0;
     for (const c of G.cities) { gamePop += c.pop; c.hist = []; c.happy = c.happyTarget; }
-    G.popScale = Math.max(1, G.meta.realPop * 0.75 / Math.max(1, gamePop));
-    const realCity = G.cities.reduce((sum, c) => sum + (c.realPop || 0), 0);
-    G.cityScale = S.clamp(realCity * 1.3 / Math.max(1, gamePop), 1, G.popScale);
+    if (city) { G.popScale = 1; G.cityScale = 1; }   // Stadtmodus: echte Einwohnerzahlen
+    else {
+      G.popScale = Math.max(1, G.meta.realPop * 0.75 / Math.max(1, gamePop));
+      const realCity = G.cities.reduce((sum, c) => sum + (c.realPop || 0), 0);
+      G.cityScale = S.clamp(realCity * 1.3 / Math.max(1, gamePop), 1, G.popScale);
+    }
     eco.money = m0; eco.approval = 60; G.month = 0; G.stats = []; G.log = []; G.mods = [];
     G.pendingEvent = null; G.ach = {};
     S.tick(G);
@@ -940,7 +944,7 @@
         const share = S.clamp(eco.approval + (Math.random() - 0.5) * 8, 0, 100);
         if (share >= 50) {
           S.log(G, 'Wahlsieg! Du wirst mit ' + S.fmt1(share) + ' % im Amt bestätigt.', 'good');
-          G.pendingEvent = { title: 'Wiedergewählt', text: 'Das Volk hat gesprochen: ' + S.fmt1(share) + ' % der Stimmen. Vier weitere Jahre, um dein Land zu formen.', choices: [{ label: 'Weiter regieren', fx: () => {} }] };
+          G.pendingEvent = { title: 'Wiedergewählt', text: 'Das Volk hat gesprochen: ' + S.fmt1(share) + ' % der Stimmen. Vier weitere Jahre, um deine Stadt zu formen.', choices: [{ label: 'Weiter regieren', fx: () => {} }] };
         } else gameOver(G, 'Abgewählt', 'Nur ' + S.fmt1(share) + ' % der Stimmen. Die Opposition übernimmt die Regierung.');
       } else if (G.month - eco.lastElection === 42) S.log(G, 'In sechs Monaten wird gewählt. Aktuelle Zustimmung: ' + Math.round(eco.approval) + ' %.', 'warn');
     } else {
@@ -1164,7 +1168,7 @@
     { id: 'boomtown', name: 'Boomtown', desc: 'Eine selbst gegründete Stadt erreicht 1 Mio. Einwohner', check: (G) => G.cities.some(c => c.isNew && c.pop * S.cityScale(G) >= 1e6) },
     { id: 'founder', name: 'Stadtgründer·in', desc: 'Drei neue Städte gegründet', check: (G) => G.cities.filter(c => c.isNew).length >= 3 },
     { id: 'green', name: 'Energiewende', desc: 'Mindestens 100 MW Strom und kein Kohlekraftwerk', check: (G) => G.eco.last && G.eco.last.eProd >= 100 && !G.blds.some(b => b.b === 20) },
-    { id: 'rich', name: 'Volle Schatzkammer', desc: '10.000 Mio. T in der Staatskasse', check: (G) => G.eco.money >= 10000 },
+    { id: 'rich', name: 'Volle Schatzkammer', desc: '10.000 Mio. T in der Stadtkasse', check: (G) => G.eco.money >= 10000 },
     { id: 'debtfree', name: 'Schuldenfrei', desc: 'Alle Kredite zurückgezahlt nach mindestens einem Kredit', check: (G) => G.eco.hadDebt && G.eco.debt <= 0 },
     { id: 'beloved', name: 'Landesmutter, Landesvater', desc: 'Zustimmung über 80 %', check: (G) => G.eco.approval >= 80 },
     { id: 'desert', name: 'Die Wüste lebt', desc: '25 Kacheln bewässert', check: (G) => { let n = 0; for (let i = 0; i < G.W * G.H; i++) n += G.t.irrig[i]; return n >= 25; } },

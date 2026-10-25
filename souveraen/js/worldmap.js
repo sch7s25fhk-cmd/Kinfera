@@ -83,8 +83,9 @@
     const c = WM.canvas;
     if (c && c.clientWidth && c.clientHeight && (Math.abs(c.clientWidth - WM.cw) > 0.5 || Math.abs(c.clientHeight - WM.ch) > 0.5)) WM.resize();
   };
-  const radius = () => WM.baseR * WM.zoom;
-  const center = () => [WM.cw / 2, WM.ch * (opts.cy || 0.46)];
+  // WM.area = [oben, unten] in px: freier Bereich zwischen Kopf und Karte (Startbildschirm)
+  const radius = () => (WM.area ? Math.min(WM.baseR, (WM.area[1] - WM.area[0]) * 0.46) : WM.baseR) * WM.zoom;
+  const center = () => [WM.cw / 2, WM.area ? (WM.area[0] + WM.area[1]) / 2 : WM.ch * (opts.cy || 0.46)];
 
   function matrix() {
     const l = WM.lon * D2R, p = WM.lat * D2R;
@@ -272,7 +273,7 @@
     // Länder
     const view = [vx, vy, vz];
     const visible = [];
-    for (const it of WM.items) {
+    for (const it of (opts.noBorders ? [] : WM.items)) {
       const d = it.center[0] * vx + it.center[1] * vy + it.center[2] * vz;
       if (Math.acos(Math.max(-1, Math.min(1, d))) > Math.PI / 2 + it.rad + 0.02) continue;
       const path = new Path2D();
@@ -349,7 +350,43 @@
       c.fillStyle = it === WM.sel ? '#1a2633' : 'rgba(26,38,51,' + (0.35 + d * 0.45).toFixed(2) + ')';
       c.fillText(it.c.n.toUpperCase(), sx, sy);
     }
+    // Stadtmarken: eigene Wahl, andere Spieler
+    if (WM.marks && WM.marks.length) drawMarks(c, cx, cy, R, m, vx, vy, vz, W, H);
   };
+
+  function drawMarks(c, cx, cy, R, m, vx, vy, vz, W, H) {
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    const placed = [];
+    // eigene Marken zuerst: ihre Beschriftung hat Vorrang
+    const list = WM.marks.slice().sort((a, b) => (a.kind === 'other' ? 1 : 0) - (b.kind === 'other' ? 1 : 0));
+    for (const mk of list) {
+      const p = toXYZ(mk.lon, mk.lat);
+      const d = p[0] * vx + p[1] * vy + p[2] * vz;
+      if (d < 0.02) continue;
+      const sx = cx + R * (p[0] * m[0] + p[1] * m[1]), sy = cy - R * (p[0] * m[3] + p[1] * m[4] + p[2] * m[5]);
+      if (sx < -20 || sy < -20 || sx > W + 20 || sy > H + 20) continue;
+      const own = mk.kind !== 'other';
+      if (mk.kind === 'pick') {
+        // Stecknadel
+        c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(sx, sy, 5, 2, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#e8b23a'; c.strokeStyle = '#1a2633'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx - 6, sy - 13); c.arc(sx, sy - 16, 7, Math.PI * 0.8, Math.PI * 0.2); c.closePath(); c.fill(); c.stroke();
+        c.fillStyle = '#1a2633'; c.beginPath(); c.arc(sx, sy - 16, 2.6, 0, Math.PI * 2); c.fill();
+      } else {
+        c.fillStyle = own ? '#e8b23a' : '#f4efe2'; c.strokeStyle = '#1a2633'; c.lineWidth = 1.5;
+        c.beginPath(); c.arc(sx, sy, own ? 5 : 3.6, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+      if (!mk.label) continue;
+      const ty = mk.kind === 'pick' ? sy - 16 : sy;
+      c.font = (own ? '700 12px' : '600 11px') + ' "Public Sans", system-ui, sans-serif';
+      const tw = c.measureText(mk.label).width;
+      const box = [sx + 10, ty - 8, sx + 14 + tw, ty + 8];
+      if (!own && placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+      placed.push(box);
+      c.lineWidth = 3; c.strokeStyle = 'rgba(10,18,28,0.75)'; c.strokeText(mk.label, sx + 11, ty);
+      c.fillStyle = own ? '#ffe7a8' : '#f4efe2'; c.fillText(mk.label, sx + 11, ty);
+    }
+  }
 
   // ---------- Touch und Maus ----------
   function bindInput(cv) {
@@ -415,8 +452,13 @@
             lastTap = 0;
           } else {
             lastTap = now;
-            const h = hit(WM.evX(e), WM.evY(e));
-            if (h) { WM.sel = h; WM.onSelect(h); }
+            if (WM.onTap) {
+              const p = unproject(WM.evX(e), WM.evY(e));
+              if (p) WM.onTap(p[0], p[1]);
+            } else {
+              const h = hit(WM.evX(e), WM.evY(e));
+              if (h) { WM.sel = h; WM.onSelect(h); }
+            }
           }
         }
         drag = null; pinch = null;
@@ -465,7 +507,7 @@
   return WM;
   };
 
-  const WM = S.WM = S.makeGlobe({ texture: () => (S.Sat ? S.Sat.get() : null) });
+  const WM = S.WM = S.makeGlobe({ noBorders: true, texture: () => (S.Sat ? S.Sat.get() : null) });
 
   /** Kleine Umriss-Vorschau eines Landes für die Infokarte */
   WM.shapePreview = function (canvas, item) {

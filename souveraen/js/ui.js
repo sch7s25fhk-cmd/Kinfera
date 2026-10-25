@@ -15,7 +15,7 @@
     UI.tool = 'inspect'; UI.cat = null; UI.sel = null; R.sel = null; R.selCity = null;
     $('tbName').textContent = G.meta.name;
     const gov = S.GOVS[G.meta.gov];
-    $('tbRuler').textContent = G.meta.ruler ? gov.title + ' ' + G.meta.ruler : gov.name;
+    $('tbRuler').textContent = G.mode === 'city' ? S.fmtCoords(G.meta.lat, G.meta.lon) : G.meta.ruler ? gov.title + ' ' + G.meta.ruler : gov.name;
     buildToolbar();
     buildViews();
     buildTabs();
@@ -28,6 +28,7 @@
     const tb = $('toolbar');
     tb.innerHTML = '';
     for (const cat of S.TOOL_CATS) {
+      if (cat.key === 'militaer' && UI.G && UI.G.mode === 'city') continue;
       const b = document.createElement('button');
       b.className = 'tcat';
       b.dataset.cat = cat.key;
@@ -103,7 +104,10 @@
   function buildTabs() {
     const t = $('tabs');
     t.innerHTML = '';
+    const city = UI.G && UI.G.mode === 'city';
+    if (city && UI.tab === 'militaer') UI.tab = 'lage';
     for (const [k, n] of TABS) {
+      if (city && k === 'militaer') continue;
       const b = document.createElement('button');
       b.textContent = n; b.dataset.tab = k; b.setAttribute('role', 'tab');
       b.addEventListener('click', () => UI.showTab(k));
@@ -132,7 +136,7 @@
     const eco = G.eco;
     const net = L.net || 0;
     const stats = [];
-    stats.push(['Staatskasse', S.fmtMoney(eco.money), '<i class="' + (net >= 0 ? 'up' : 'down') + '">' + S.fmtMoney(net, true).replace(' Mio. T', '') + '</i>', eco.money < 0 ? 'bad' : net < 0 ? 'warn' : '']);
+    stats.push(['Stadtkasse', S.fmtMoney(eco.money), '<i class="' + (net >= 0 ? 'up' : 'down') + '">' + S.fmtMoney(net, true).replace(' Mio. T', '') + '</i>', eco.money < 0 ? 'bad' : net < 0 ? 'warn' : '']);
     stats.push(['Bevölkerung', S.fmtPop((L.pop || 0) * G.popScale), '', '']);
     const ap = Math.round(eco.approval);
     stats.push(['Zustimmung', ap + ' %', '<div class="meter"><span style="width:' + ap + '%;background:' + (ap >= 55 ? 'var(--good)' : ap >= 45 ? 'var(--warn)' : 'var(--bad)') + '"></span></div>', ap < 45 ? 'bad' : ap < 52 ? 'warn' : 'good']);
@@ -163,7 +167,7 @@
     if (!L) return out;
     if (L.eProd < L.eDem) out.push(['bad', 'Stromknappheit: ' + Math.round(L.eProd) + ' von ' + Math.round(L.eDem) + ' MW. Baue Kraftwerke, sonst stockt die Industrie und die Städte wachsen nicht in die Höhe.']);
     else if (L.eProd < L.eDem * 1.1) out.push(['warn', 'Das Stromnetz läuft am Limit (' + Math.round(L.eProd) + '/' + Math.round(L.eDem) + ' MW).']);
-    if (L.food < L.foodNeed) out.push(['bad', 'Nahrungsmangel! Das Land muss teuer importieren. Baue Bauernhöfe oder Fischereien.']);
+    if (L.food < L.foodNeed) out.push(['bad', 'Nahrungsmangel! Die Stadt muss teuer importieren. Baue Bauernhöfe oder Fischereien.']);
     if (L.employment < 0.92) out.push(['warn', S.fmt1((1 - L.employment) * 100) + ' % Arbeitslosigkeit. Gewerbe- und Industriezonen, Fabriken und Minen schaffen Jobs.']);
     if (L.laborRatio < 0.9) out.push(['warn', 'Es fehlen Arbeitskräfte – Betriebe arbeiten nur mit ' + pct(L.laborRatio) + '. Wohnzonen lassen Städte wachsen.']);
     if (L.net < 0) out.push([G.eco.money < 500 ? 'bad' : 'warn', 'Der Haushalt macht ' + S.fmtMoney(-L.net) + ' Verlust pro Monat.']);
@@ -177,7 +181,7 @@
       const left = 48 - (G.month - G.eco.lastElection);
       if (left <= 12) out.push([G.eco.approval < 50 ? 'bad' : 'good', 'Wahl in ' + left + ' Monaten. Du brauchst mindestens 50 % Zustimmung.']);
     }
-    if (!out.length) out.push(['good', 'Das Land ist stabil. Zeit, Neues zu bauen.']);
+    if (!out.length) out.push(['good', 'Die Stadt ist stabil. Zeit, Neues zu bauen.']);
     return out;
   }
 
@@ -230,7 +234,7 @@
         const a = alerts(G);
         return '<section><h3>Lagebericht · ' + S.dateStr(G.month) + '</h3><div class="alerts">' +
           a.map(x => '<div class="alert ' + x[0] + '">' + esc(x[1]) + '</div>').join('') + '</div></section>' +
-          '<section><h4>Staatskasse</h4>' + spark(G, 'money', '#e3ad3c') + '</section>' +
+          '<section><h4>Stadtkasse</h4>' + spark(G, 'money', '#e3ad3c') + '</section>' +
           '<section><h4>Zustimmung</h4>' + spark(G, 'app', '#5fbf7f') + '</section>' +
           '<section><h4>Bevölkerung</h4>' + spark(G, 'pop', '#7fb3d6') + '</section>' +
           '<section><h4>Versorgung (pro Monat)</h4><div class="kv">' +
@@ -341,9 +345,10 @@
   // ---------- Gesetze ----------
   PANELS.gesetze = {
     build(G) {
-      const groups = [...new Set(S.LAWS.map(l => l.group))];
+      const city = G.mode === 'city';
+      const groups = [...new Set(S.LAWS.map(l => l.group))].filter(g => !(city && g === 'Militär'));
       const L = G.eco.last;
-      let h = '<section><h3>Gesetze</h3><p class="muted">Du regierst durch Entscheidungen: Gesetze bestimmen, wie schnell Städte wachsen, wie stark die Wirtschaft ist und wie viele Menschen bereit sind, als Soldaten zu dienen. Ein Gesetz lässt sich alle zwei Monate ändern.</p>' +
+      let h = '<section><h3>' + (city ? 'Satzungen' : 'Gesetze') + '</h3><p class="muted">' + (city ? 'Du regierst deine Stadt durch Entscheidungen: Satzungen bestimmen, wie schnell sie wächst, wie stark die Wirtschaft ist und wie zufrieden die Menschen sind. Eine Satzung' : 'Du regierst durch Entscheidungen: Gesetze bestimmen, wie schnell Städte wachsen, wie stark die Wirtschaft ist und wie viele Menschen bereit sind, als Soldaten zu dienen. Ein Gesetz') + ' lässt sich alle zwei Monate ändern.</p>' +
         (L && L.laws ? '<div class="kv"><span>Kosten der Programme</span><span>' + S.fmtMoney(L.laws) + '/Mon.</span></div>' : '') + '</section>';
       for (const g of groups) {
         h += '<section><h4>' + g + '</h4>';
@@ -880,6 +885,14 @@
     const ll = R.pickLonLat(sx, sy);
     if (!ll) return;
     const World = S.World;
+    if (G.mode === 'city') {
+      const where = S.fmtCoords(ll[1], ll[0]);
+      const near = S.Online.near(ll[1], ll[0], 60)[0];
+      if (near && near.d < 20) UI.toast(S.Online.label(near.c) + ' · ' + S.fmtPop(near.c.pop) + ' Einwohner', 'info', 2600);
+      else if (R.ppt < 3) flyHome();
+      else UI.toast((World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1])) ? 'Unberührtes Land' : 'Offenes Meer') + ' · ' + where, 'info', 1800);
+      return;
+    }
     const o = G.mil ? S.Mil.owner(G, World.gxOf(ll[0]), World.gyOf(ll[1])) : World.ownerAt(World.gxOf(ll[0]), World.gyOf(ll[1]));
     if (!o) { UI.toast('Offenes Meer · ' + S.fmt1(Math.abs(ll[1])) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + ', ' + S.fmt1(Math.abs(ll[0])) + '° ' + (ll[0] >= 0 ? 'O' : 'W'), 'info', 1800); return; }
     const c = S.WORLD[o - 1];
@@ -890,7 +903,7 @@
     UI.toast(c.n + ' · ' + S.fmtPop(c.pop) + ' Einwohner' + (city && R.ppt >= 3 ? ' · bei ' + city.name : '') + war, war ? 'bad' : 'info', 2400);
   }
 
-  /** „Zu meinem Land“ zeigen, wenn das Land nicht im Bild ist */
+  /** „Zu meiner Stadt“ zeigen, wenn die eigene Karte nicht im Bild ist */
   function updateHomeBtn() {
     const G = UI.G;
     if (!G || !R.cw) return;
@@ -1158,7 +1171,7 @@
     }
     if (R.flatA < 1 || !S.inb(G, tx, ty)) {
       if (tool.kind === 'inspect') tapWorld(sx, sy);
-      else UI.toast('Dort kannst du nicht bauen: außerhalb deines Staatsgebiets.', 'warn', 2000);
+      else UI.toast('Dort kannst du nicht bauen: außerhalb deines Stadtgebiets.', 'warn', 2000);
       return;
     }
     if (tool.kind === 'inspect') {
@@ -1413,17 +1426,17 @@
   }
 
   UI.openMenu = function () {
-    openModal('<p class="eyebrow">Staatskanzlei</p><h2>Menü</h2><div class="choices">' +
+    openModal('<p class="eyebrow">Rathaus</p><h2>Menü</h2><div class="choices">' +
       '<button class="btn" id="mResume">Weiterregieren</button>' +
       '<button class="btn" id="mSave">Spiel speichern</button>' +
       '<button class="btn" id="mHelp">Spielanleitung</button>' +
-      '<button class="btn" id="mWorld">Anderes Land wählen</button>' +
-      '</div><p class="muted">Das Spiel speichert auch automatisch einmal im Jahr in diesem Browser.</p>', (box) => {
+      '<button class="btn" id="mWorld">Zum Globus</button>' +
+      '</div><p class="muted">Das Spiel speichert automatisch in diesem Browser.</p>', (box) => {
       box.querySelector('#mResume').addEventListener('click', () => closeModal());
       box.querySelector('#mSave').addEventListener('click', () => { const ok = S.save(UI.G); UI.toast(ok ? 'Gespeichert.' : 'Speichern ist in diesem Browser nicht möglich.', ok ? 'good' : 'bad'); closeModal(); });
       box.querySelector('#mHelp').addEventListener('click', () => UI.openHelp());
       box.querySelector('#mWorld').addEventListener('click', () => {
-        openModal('<h2>Land verlassen?</h2><p class="lead">Dein aktuelles Spiel wird vorher gespeichert und kann über „Weiterspielen“ fortgesetzt werden.</p><div class="row-end"><button class="btn btn-ghost" id="nNo">Bleiben</button><button class="btn btn-primary" id="nYes">Zur Weltkarte</button></div>', (b2) => {
+        openModal('<h2>Zum Globus?</h2><p class="lead">Deine Stadt wird vorher gespeichert und läuft weiter. Auf dem Startbildschirm geht es mit „Weiter in …“ zurück.</p><div class="row-end"><button class="btn btn-ghost" id="nNo">Bleiben</button><button class="btn btn-primary" id="nYes">Zur Weltkarte</button></div>', (b2) => {
           b2.querySelector('#nNo').addEventListener('click', () => closeModal());
           b2.querySelector('#nYes').addEventListener('click', () => { S.save(UI.G); closeModal(false); S.toWorld(); });
         });
@@ -1432,18 +1445,18 @@
   };
 
   UI.openHelp = function () {
-    openModal('<p class="eyebrow">Spielanleitung</p><h2>So regierst du</h2><div class="helpgrid">' +
-      '<p><b>Ziel.</b> Halte dein Volk zufrieden und die Kasse gefüllt. In der Demokratie wird alle vier Jahre gewählt – unter 50 % Zustimmung ist deine Amtszeit vorbei.</p>' +
-      '<p><b>Wirtschaft.</b> Bauernhöfe und Fischereien liefern Nahrung, Bergwerke, Sägewerke und Ölpumpen Rohstoffe, Fabriken machen daraus Güter. Überschüsse werden exportiert, Mängel teuer importiert.</p>' +
-      '<p><b>Strom.</b> Ohne genug Kraftwerke stockt die Industrie und Städte wachsen nicht in die Höhe.</p>' +
-      '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zu einer Stadt führt. Städte ohne Verbindung zur Hauptstadt sind unzufrieden.</p>' +
-      '<p><b>Städte formen.</b> Städte wachsen von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe.</p>' +
-      '<p><b>Gesetze.</b> Im Tab „Gesetze“ regierst du durch Entscheidungen: Bauförderung und sozialer Wohnungsbau lassen Städte schneller wachsen, Zuwanderung und Familienpolitik bringen Menschen, Umweltauflagen tauschen saubere Luft gegen Industrie. Wehrdienst, Rüstungsetat, Ausbildung, Propaganda und Soldatenfürsorge bestimmen, wie viele Soldaten du hast und wie gut sie kämpfen.</p>' +
-      '<p><b>Wachstum.</b> Städte wachsen jeden Tag von selbst, wenn die Menschen zufrieden sind, Arbeit und Strom haben und angebunden sind. Das Stadt-Panel zeigt Wachstum, Neubauten und was bremst.</p>' +
+    openModal('<p class="eyebrow">Spielanleitung</p><h2>So führst du deine Stadt</h2><div class="helpgrid">' +
+      '<p><b>Ziel.</b> Du hast deine Stadt an echten Koordinaten gegründet. Lass sie wachsen, halte die Menschen zufrieden und die Stadtkasse gefüllt. Alle vier Jahre wird gewählt – unter 50 % Zustimmung ist deine Amtszeit vorbei.</p>' +
+      '<p><b>Gemeinsame Welt.</b> Jede Spielerin und jeder Spieler besitzt genau eine Stadt. Zoomst du bis zum Globus heraus, siehst du die Städte der anderen mit Namen und Einwohnerzahl. Es gibt keine Länder und keine Kriege – nur Nachbarn.</p>' +
+      '<p><b>Wirtschaft.</b> Bauernhöfe und Fischereien liefern Nahrung, Bergwerke, Sägewerke und Ölpumpen Rohstoffe, Fabriken machen daraus Güter. Überschüsse werden verkauft, Mängel teuer eingekauft.</p>' +
+      '<p><b>Strom.</b> Ohne genug Kraftwerke stockt die Industrie und die Stadt wächst nicht in die Höhe.</p>' +
+      '<p><b>Anschluss.</b> Gebäude brauchen eine Straße in höchstens zwei Feldern Abstand, die zur Stadt führt. Ortsteile ohne Verbindung zum Zentrum sind unzufrieden.</p>' +
+      '<p><b>Stadt formen.</b> Die Stadt wächst von selbst, wenn die Menschen zufrieden sind und es Arbeit gibt. Mit Zonen lenkst du, wo Wohnungen, Gewerbe und Industrie entstehen, mit dem Grüngürtel hältst du Flächen frei. Im Stadtpanel bestimmst du Stil, Straßennetz und Bauhöhe. Mit „Stadt gründen“ legst du weitere Ortsteile an.</p>' +
+      '<p><b>Satzungen.</b> Im Tab „Gesetze“ entscheidest du: Bauförderung und sozialer Wohnungsbau lassen die Stadt schneller wachsen, Zuwanderung und Familienpolitik bringen Menschen, Umweltauflagen tauschen saubere Luft gegen Industrie.</p>' +
+      '<p><b>Wachstum.</b> Die Stadt wächst jeden Tag ein Stück, wenn die Menschen Arbeit und Strom haben und alles angebunden ist. Das Stadt-Panel zeigt Wachstum, Neubauten und was bremst.</p>' +
       '<p><b>Landschaft.</b> Hebe Land aus dem Meer, grabe Seen, forste auf oder bewässere Wüsten, damit Felder dort gedeihen.</p>' +
-      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen und über die Grenzen hinweg die ganze Welt erkunden – fremde Länder mit ihren echten Städten. „Zu meinem Land“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Beim Tippen zeigt eine Lupe über dem Finger genau das Feld, das getroffen wird; einen gesetzten Bauplatz kannst du mit dem Finger greifen und verschieben. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
-      '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Welt läuft weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
-      '<p><b>Militär.</b> Das Oberkommando führt deine Truppen selbst: Lege im Militär-Panel je Krieg fest, ob verteidigt, die Front gehalten oder angegriffen wird. Soldaten kommen aus der Bevölkerung – wie viele, hängt von Gesetzen und Zustimmung ab. Du kannst auch selbst eingreifen: Tippe eine eigene Einheit an, wähle „Marschziel“ und tippe das Ziel. Ein Ziel im Nachbarland bedeutet Krieg. Truppen kämpfen, wo sie auf Gegner treffen. Nur Infanterie erobert Land: Betritt sie feindlichen Boden, nimmt sie alles im Umkreis von etwa 15 km ein (gestrichelter Kreis), aber nie hinter der feindlichen Front. Eine Stadt ist erobert, sobald Infanterie ihren Mittelpunkt erreicht. Ist ein Stück Feindesland ganz von deinem Gebiet umschlossen und stehen dort keine feindlichen Truppen, fällt es dir zu (Städte darin ausgenommen). Erobertes Land gehört dir ganz – auf jeder Zoomstufe mit neuer Grenze: Du kannst dort bauen und neue Städte gründen. Neue Truppen bildest du in Kasernen aus (Panel „Militär“). Stillstehende Truppen graben sich ein, Erfahrung bringt Sterne, ohne eigenes Land in der Nähe fehlt der Nachschub, und mehrere Angreifer auf ein Ziel nutzen die Flanke. Fällt die Hauptstadt des Gegners, kapituliert er: Du kannst das ganze Land annektieren. Krieg kostet Unterhalt, Handel und Zustimmung – und die Nachbarn greifen auch selbst an.</p>' +
+      '<p><b>Steuerung.</b> Ein Finger verschiebt die Karte, zwei Finger zoomen (mit Schwung). Doppelt tippen zoomt hinein; nach dem zweiten Tippen den Finger liegen lassen und ziehen zoomt stufenlos mit einer Hand. Mit zwei Fingern kurz tippen zoomt heraus. Du kannst stufenlos bis zum Globus herauszoomen; „Zu meiner Stadt“ bringt dich zurück. Wähle unten ein Werkzeug, tippe auf den Bauplatz und bestätige mit „Bauen“. Beim Tippen zeigt eine Lupe über dem Finger genau das Feld, das getroffen wird; einen gesetzten Bauplatz kannst du mit dem Finger greifen und verschieben. Straßen: Start antippen, Ziel antippen, bauen – das Ziel ist gleich der nächste Start. Zonen und Gelände malst du mit einem Finger, verschoben wird dann mit zwei.</p>' +
+      '<p><b>Zeit.</b> Ein Spielmonat dauert einen echten Tag – die Stadt lebt weiter, auch wenn die App geschlossen ist. Mit den Pfeilen oben geht es schneller (1 Monat pro Stunde oder pro 2 Minuten).</p>' +
       '</div><div class="row-end"><button class="btn btn-primary" id="hOk">Verstanden</button></div>', (box) => {
       box.querySelector('#hOk').addEventListener('click', () => closeModal());
     });
@@ -1456,8 +1469,8 @@
     const wars = G.mil ? Object.keys(G.mil.wars).map(e => S.Mil.countryName(+e)) : [];
     const news = a.news.slice(0, 12);
     openModal('<p class="eyebrow">Lagebericht · ' + S.dateFull(G) + '</p><h2>Während du weg warst</h2>' +
-      '<p class="lead">' + dur + ' sind vergangen – im Land ' + (days >= 60 ? S.fmt1(a.months) + ' Monate' : days + ' Tage') + '.' + (a.capped ? ' (Mehr als ein Jahr holt das Spiel nicht nach.)' : '') + '</p>' +
-      '<div class="kv"><span>Staatskasse</span><span>' + S.fmtMoney(a.money, true) + '</span><span>Zustimmung</span><span>' + Math.round(G.eco.approval) + ' %</span><span>Kriege</span><span>' + (wars.length ? S.esc(wars.join(', ')) : 'keine') + '</span></div>' +
+      '<p class="lead">' + dur + ' sind vergangen – in ' + esc(G.meta.name) + ' ' + (days >= 60 ? S.fmt1(a.months) + ' Monate' : days + ' Tage') + '.' + (a.capped ? ' (Mehr als ein Jahr holt das Spiel nicht nach.)' : '') + '</p>' +
+      '<div class="kv"><span>Kasse</span><span>' + S.fmtMoney(a.money, true) + '</span><span>Zustimmung</span><span>' + Math.round(G.eco.approval) + ' %</span>' + (G.mil ? '<span>Kriege</span><span>' + (wars.length ? S.esc(wars.join(', ')) : 'keine') + '</span>' : '<span>Einwohner</span><span>' + S.fmtPop(G.cities.reduce((s, c) => s + c.pop, 0) * G.popScale) + '</span>') + '</div>' +
       (news.length ? '<ul class="log">' + news.map(l => '<li class="' + l.kind + '"><time>' + S.dateStr(l.m) + '</time><span>' + S.esc(l.text) + '</span></li>').join('') + '</ul>' : '<p class="muted">Keine besonderen Vorkommnisse.</p>') +
       '<div class="row-end"><button class="btn btn-primary" id="awOk">Weiterregieren</button></div>', (box) => {
       box.querySelector('#awOk').addEventListener('click', () => closeModal());
@@ -1465,13 +1478,13 @@
   };
 
   UI.openBriefing = function (G) {
-    const I = S.INCOME[G.meta.inc], gov = S.GOVS[G.meta.gov];
     const cap = G.cities.find(c => c.capital) || G.cities[0];
-    openModal('<p class="eyebrow">Amtsantritt · ' + S.dateStr(G.month) + '</p><h2>' + esc(G.meta.name) + '</h2>' +
-      '<p class="lead">' + (G.meta.ruler ? esc(gov.title + ' ' + G.meta.ruler) + ', das' : 'Das') + ' Land gehört dir. ' + S.fmtPop(G.eco.last.pop * G.popScale) + ' Menschen in ' + G.cities.length + ' großen Städten erwarten, dass du es voranbringst. Regierungssitz ist ' + esc(cap.name) + '.</p>' +
-      '<div class="kv"><span>Regierungsform</span><span>' + gov.name + '</span><span>Wirtschaftslage</span><span>' + I.name + '</span><span>Staatskasse</span><span>' + S.fmtMoney(G.eco.money) + '</span><span>Fläche je Feld</span><span>≈ ' + S.fmt(G.kmPerTile) + ' km</span></div>' +
-      '<p class="muted">Ein Finger verschiebt die Karte, zwei Finger zoomen. Zum Bauen ein Werkzeug unten wählen, Platz antippen, „Bauen“ drücken. Erste Schritte: Lagebericht lesen, für Strom sorgen, Gebäude per Straße anschließen und Wohnzonen ausweisen.</p>' +
-      '<div class="row-end"><button class="btn btn-ghost" id="bHelp">Anleitung</button><button class="btn btn-primary" id="bGo">Regieren</button></div>', (box) => {
+    const pop = G.cities.reduce((s, c) => s + c.pop, 0) * G.popScale;
+    openModal('<p class="eyebrow">Gründung · ' + S.dateStr(G.month) + '</p><h2>' + esc(G.meta.name) + '</h2>' +
+      '<p class="lead">Deine Stadt steht – genau bei ' + S.fmtCoords(G.meta.lat, G.meta.lon) + '. ' + S.fmtPop(pop) + ' Menschen sind schon da und erwarten, dass du ' + esc(cap.name) + ' groß machst.</p>' +
+      '<div class="kv"><span>Baustil</span><span>' + S.STYLES[cap.style].name + '</span><span>Stadtkasse</span><span>' + S.fmtMoney(G.eco.money) + '</span><span>Fläche je Feld</span><span>' + Math.round(G.kmPerTile * 1000) + ' m</span><span>Stadtgebiet</span><span>' + Math.round(G.W * G.kmPerTile) + ' × ' + Math.round(G.H * G.kmPerTile) + ' km</span></div>' +
+      '<p class="muted">Ein Finger verschiebt die Karte, zwei Finger zoomen. Zum Bauen ein Werkzeug unten wählen, Platz antippen, „Bauen“ drücken. Erste Schritte: Wohnzonen ausweisen, für Strom sorgen, Betriebe per Straße anschließen. Zoom ganz heraus, um die Städte der anderen Spieler zu sehen.</p>' +
+      '<div class="row-end"><button class="btn btn-ghost" id="bHelp">Anleitung</button><button class="btn btn-primary" id="bGo">Los geht’s</button></div>', (box) => {
       box.querySelector('#bGo').addEventListener('click', () => closeModal());
       box.querySelector('#bHelp').addEventListener('click', () => UI.openHelp());
     });

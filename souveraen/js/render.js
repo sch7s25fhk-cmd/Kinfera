@@ -35,7 +35,7 @@
     R.viewCv.width = G.W; R.viewCv.height = G.H;
     R.viewKey = null;
     if (!R.globe) {
-      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2, texture: () => S.Sat.get(), overlay: (c, g) => { if (R.G) S.Terr.drawGlobe(c, g, terrColor); S.FX.globeClouds(c, g, performance.now() / 1000); } });
+      R.globe = S.makeGlobe({ noIdle: true, noInput: true, cy: 0.5, maxZoom: 1e9, maxDpr: 2, noBorders: true, texture: () => S.Sat.get(), overlay: (c, g) => { if (R.G && !World.city) S.Terr.drawGlobe(c, g, terrColor); S.FX.globeClouds(c, g, performance.now() / 1000); } });
       R.globe.init(canvas, () => {});
     }
     S.Terr.reset(G);
@@ -265,11 +265,12 @@
     const F = blurField(t.forest, W, H);
     const nA = R.noiseA, nB = R.noiseB, seed = Bk.meta.seed;
     const gpx = World.wrapGx(Bk.gx0) * PX, gpy = Bk.gy0 * PX;
+    const NS = PX * (Bk.noiseScale || 1);   // Rauschen grober bei Übersichtsbildern
     const wx = [0, 0, 0, 0], wy = [0, 0, 0, 0];
     for (let py = 0; py < H * PX; py++) {
       for (let px = 0; px < W * PX; px++) {
         const qx = gpx + px, qy = gpy + py;
-        const n1 = nA(qx * 1.32 / PX, qy * 1.32 / PX), n2 = nB(qx * 0.68 / PX, qy * 0.68 / PX);
+        const n1 = nA(qx * 1.32 / NS, qy * 1.32 / NS), n2 = nB(qx * 0.68 / NS, qy * 0.68 / NS);
         // verwirbelter Abtastpunkt (in Feldern)
         let fx = (px + 0.5) / PX - 0.5 + (n2 - 0.5) * 0.7, fy = (py + 0.5) / PX - 0.5 + (n1 - 0.5) * 0.7;
         fx = Math.max(0, Math.min(W - 1.001, fx)); fy = Math.max(0, Math.min(H - 1.001, fy));
@@ -411,7 +412,7 @@
     const gx0 = x0 - 2, gy0 = y0 - 2, gx1 = x1 + 2, gy1 = y1 + 2;
     for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawGround(c, Bk, x, y);
     for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) drawRoads(c, Bk, x, y);
-    drawBorders(c, Bk, gx0, gy0, gx1, gy1, TS, { w: 3, dash: [7, 5] });
+    if (!World.city) drawBorders(c, Bk, gx0, gy0, gx1, gy1, TS, { w: 3, dash: [7, 5] });
     const oy1 = Math.min(H - 1, y1 + 3);
     for (let y = gy0; y <= oy1; y++) for (let x = gx0; x <= gx1; x++) drawObject(c, Bk, x, y);
     c.restore();
@@ -513,7 +514,7 @@
       c.moveTo((x + 0.5) * OVR, (y + 0.5) * OVR); c.lineTo((x + ox + 0.5) * OVR, (y + oy + 0.5) * OVR);
     }
     c.stroke();
-    drawBorders(c, Bk, 0, 0, W - 1, H - 1, OVR, { w: 2.4, dash: [7, 5] });
+    if (!World.city) drawBorders(c, Bk, 0, 0, W - 1, H - 1, OVR, { w: 2.4, dash: [7, 5] });
     return { cv, w: size, h: size };
   }
   const _hex = {};
@@ -546,6 +547,41 @@
   }
 
   // ---------------- Grobe Weltkarte (ganz weit draußen, flach) ----------------
+  // ---------------- Umland (Stadtmodus): grobe Geländebilder rund um die Stadt ----------------
+  const REGION_LEVELS = [[8, 512], [2, 512]];   // [Felder je Pixel, Pixel]
+  function regionImage(G, step, n) {
+    const cx = G.gx0 + G.W / 2, cy = G.gy0 + G.H / 2;
+    const gx0 = Math.round((cx - n * step / 2) / step) * step, gy0 = Math.round((cy - n * step / 2) / step) * step;
+    const Bk = World.sampleBlock(gx0, gy0, n, n, step);
+    Bk.noiseScale = step >= 8 ? 4 : 2;
+    const cv = terrainImage(Bk, 1);
+    // Ränder weich ausblenden
+    const ctx = cv.getContext('2d'), img = ctx.getImageData(0, 0, n, n), d = img.data, fe = n * 0.2;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const k = Math.min(x, y, n - 1 - x, n - 1 - y) / fe;
+      if (k < 1) d[(y * n + x) * 4 + 3] = 255 * k * k * (3 - 2 * k);
+    }
+    ctx.putImageData(img, 0, 0);
+    return { cv, gx0, gy0, size: n * step };
+  }
+  function drawRegion(c, G, flatA) {
+    if (!R.region || R.region.G !== G) R.region = { G, levels: [], next: 0, t: 0 };
+    const Rg = R.region;
+    // eine Stufe pro Bild nachbauen, sobald die Karte ruht
+    if (Rg.next < REGION_LEVELS.length && performance.now() - Rg.t > 300 && R.renderedNow === 0) {
+      const [step, n] = REGION_LEVELS[Rg.next++];
+      Rg.levels.push(regionImage(G, step, n));
+      Rg.t = performance.now(); R.renderedNow++;
+    }
+    c.globalAlpha = flatA;
+    for (const L of Rg.levels) {
+      for (const k of [-1, 0, 1]) {
+        const wx = (L.gx0 - G.gx0 + k * World.WT) * TS, wy = (L.gy0 - G.gy0) * TS;
+        c.drawImage(L.cv, wx, wy, L.size * TS, L.size * TS);
+      }
+    }
+  }
+
   function worldTexture() {
     if (R.wtex) return R.wtex;
     S.Sat.build();
@@ -1798,6 +1834,8 @@
     const tex = worldTexture();
     const ty = -G.gy0 * TS;
     for (const k of [-1, 0, 1]) drawPart(c, tex, -G.gx0 * TS + k * span, ty, span, span, vx0, vy0, vx1, vy1);
+    // Umland der Stadt in zwei feineren Stufen, damit die Zwischenzoomstufen nicht verschwimmen
+    if (World.city) drawRegion(c, G, flatA);
     // globale Feldbereiche
     const gA = vx0 / TS + G.gx0, gB = vx1 / TS + G.gx0, hA = Math.max(0, vy0 / TS + G.gy0), hB = Math.min(WT - 1, vy1 / TS + G.gy0);
     const centerG = [R.camGX(), R.camGY()];
@@ -1837,7 +1875,7 @@
     };
     // 3) politische Flächen weit draußen
     const polA = ppt < 1 ? 0.22 : Math.max(0, 0.22 * (1 - (ppt - 1) / 4));   // Länder nur leicht getönt, das Satellitenbild bleibt sichtbar
-    if (ppt < 9) {
+    if (ppt < 9 && !World.city) {
       drawPolitical(c, G, z, dpr, polA, ppt, vx0, vy0, vx1, vy1);
       // verschobene Grenzen über die ursprünglichen Ländergrenzen legen
       S.Terr.drawFlat(c, G, {
@@ -1908,8 +1946,9 @@
         c.fillText('!', sx, sy - 3.5);
       }
     }
-    if (ppt < 7) drawCountryNames(c, G, ppt);
-    if (ppt >= 2.2) { const placed = []; drawLabels(c, G, placed); drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed); }
+    if (ppt < 7 && !World.city) drawCountryNames(c, G, ppt);
+    if (ppt >= 2.2) { const placed = R._placed = []; drawLabels(c, G, placed); if (!World.city) drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed); }
+    if (World.city && S.Online && flatA >= 1) drawPlayerCities(c, G, ppt >= 2.2 ? R._placed : []);
     if (G.mil && ppt >= 0.5) { c.globalAlpha = R.flatA; c.textBaseline = 'alphabetic'; drawUnits(c, G, time); }
     if (R.loupe && flatA >= 1) drawLoupe(c, dpr);
     c.globalAlpha = 1;
@@ -2158,6 +2197,33 @@
   }
 
   const overlaps = (placed, x0, y0, x1, y1) => placed.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]);
+
+  /** Städte der anderen Spielerinnen und Spieler auf der flachen Karte */
+  function drawPlayerCities(c, G, placed) {
+    const WT = World.WT, cgx = R.camGX();
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    for (const pc of S.Online.cities) {
+      if (pc.id === S.Online.me) continue;
+      let gx = World.gxOf(pc.lon);
+      gx += Math.round((cgx - gx) / WT) * WT;
+      const gy = World.gyOf(pc.lat);
+      const [sx, sy] = R.worldToScreen((gx - G.gx0) * TS, (gy - G.gy0) * TS);
+      if (sx < -60 || sy < -20 || sx > R.cw + 20 || sy > R.ch + 20) continue;
+      const label = S.Online.label(pc), sub = S.fmtPop(pc.pop) + ' Einw.';
+      c.font = '700 12px "Public Sans", system-ui, sans-serif';
+      const w = Math.max(c.measureText(label).width, 60) + 14;
+      const box = [sx - 6, sy - 9, sx + 10 + w, sy + 22];
+      if (overlaps(placed, box[0], box[1], box[2], box[3])) continue;
+      placed.push(box);
+      c.fillStyle = '#f4efe2'; c.strokeStyle = '#1a2633'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(sx, sy, 4.5, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.lineWidth = 3; c.strokeStyle = 'rgba(10,18,28,0.75)';
+      c.strokeText(label, sx + 9, sy); c.fillText(label, sx + 9, sy);
+      c.font = '500 11px "Public Sans", system-ui, sans-serif';
+      c.strokeText(sub, sx + 9, sy + 14);
+      c.fillStyle = 'rgba(244,239,226,0.85)'; c.fillText(sub, sx + 9, sy + 14);
+    }
+  }
 
   function drawForeignLabels(c, G, ppt, gA, gB, hA, hB, placed) {
     const near = World.citiesNear(Math.floor(gA), Math.floor(hA), Math.ceil(gB - gA) + 1, Math.ceil(hB - hA) + 1);

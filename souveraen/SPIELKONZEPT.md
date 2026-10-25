@@ -1,21 +1,29 @@
 # Souverän – Spielkonzept
 
-**Genre:** Aufbau- und Staatssimulation · **Plattform:** Handy (Hochformat, Touch), läuft im Browser · **Sprache:** Deutsch
+**Genre:** Stadt-Aufbausimulation in einer gemeinsamen Welt · **Plattform:** Handy (Hochformat, Touch), läuft im Browser · **Sprache:** Deutsch
 
-> Wähle ein echtes Land der Erde. Regiere es, baue seine Wirtschaft auf, forme seine Landschaft und lass Städte nach deinen Vorstellungen wachsen.
+> Gib echte Koordinaten ein, benenne deine Stadt und gründe sie genau dort. Jede Spielerin und jeder Spieler besitzt eine Stadt – keine Länder, keine Grenzen, keine Kriege.
 
 ---
 
 ## 1. Die Idee
 
-Du bist Staatsoberhaupt eines echten Landes. Auf einem drehbaren 3D-Globus mit den echten Grenzen suchst du dir ein Land aus – Deutschland, Ägypten, Japan, Luxemburg oder Brasilien. Das Spiel erzeugt daraus eine begehbare Landkarte:
+Die Erde ist ein unbeschriebenes Satellitenbild: keine Ländergrenzen, keine fremden Städte, nur Kontinente, Meere, Klimazonen, Wälder und Gebirge. Wer spielt, sucht sich einen Ort aus und gründet dort eine eigene Stadt.
 
-- Die **Landesform** stammt aus den echten Grenzen. Nachbarländer und Meere liegen dort, wo sie wirklich liegen.
-- Das **Klima** folgt der echten geografischen Breite: Ägypten ist Wüste mit Nil-artigen Flussoasen, Norwegen kalt und bewaldet, Indonesien tropisch.
-- Die **Startstädte** sind die echten Großstädte des Landes an ihrer echten Position (Berlin, Hamburg, München …), samt Hauptstadt.
-- Die **Startbedingungen** hängen von der echten Wirtschaftslage ab: Reiche Länder haben eine volle Kasse und gebildete Menschen, die viel erwarten. Ärmere Länder starten knapp, aber jede Verbesserung macht die Menschen glücklicher.
+- **Koordinaten:** Auf dem Startbildschirm gibt man Breite und Länge ein – dezimal (`48.137, 11.575`, auch mit deutschem Komma) oder in Grad, Minuten, Sekunden (`48°08'13"N 11°34'30"E`) – oder tippt einfach auf den Globus. Der Globus fliegt hin und setzt eine Stecknadel.
+- **Echte Lage:** Die Stadt entsteht maßstabsgetreu an genau dieser Stelle (Abweichung unter 250 m). Küsten, Klima und Landschaft folgen der echten Geografie: In der Sahara ist Wüste, in Norwegen Taiga, an der Küste Meer.
+- **Prüfung:** Auf Wasser, an den Polen (über 80° Breite) oder näher als 1,5 km an einer anderen Spielerstadt lässt sich nicht gründen.
+- **Name und Stil:** Die Stadt bekommt einen frei gewählten Namen und einen Baustil (historisch, modern, Gartenstadt, Industrie, mediterran …).
+- **Stadtgebiet:** 128 × 128 Felder à 250 m, also 32 × 32 km rund um den Gründungsort. Darin baut man Straßen, Zonen, Betriebe, Kraftwerke und weitere Ortsteile.
 
-Ab dann gehört das Land dir. Du bist für Infrastruktur, Wirtschaft, Energie, Bildung und Gesundheit zuständig – und für das Aussehen des Landes.
+Ab dann gehört die Stadt dir: Du bist für Infrastruktur, Wirtschaft, Energie, Bildung und Gesundheit zuständig – und dafür, wie sie aussieht.
+
+### 1a. Gemeinsame Welt
+
+- Jede gegründete Stadt wird in eine gemeinsame Datenbank eingetragen: Name, Koordinaten, Baustil, Einwohnerzahl und eine anonyme Spieler-Kennung (Namen werden beim Anzeigen aufgelöst, nie gespeichert).
+- Auf dem Globus, auf der flachen Karte beim Herauszoomen und in der Liste „Städte in der Welt“ sieht man alle Städte mit Namen, Gründer·in und Einwohnerzahl. Ein Tipp in die Liste fliegt hin.
+- Jede Person schreibt nur ihren eigenen Eintrag. Die Einwohnerzahl wird höchstens einmal pro Spielmonat und nur bei spürbarer Änderung aktualisiert.
+- Es gibt keine Konkurrenz um Gebiete: Nachbarn sind Nachbarn. Ohne Datenbank (lokal gestartet oder nur Leserechte) läuft das Spiel ganz normal für sich.
 
 ## 2. Die drei Säulen
 
@@ -70,8 +78,8 @@ Die Häuser verdichten sich vom Zentrum aus: aus Einfamilienhäusern werden Reih
 
 ## 3. Spielablauf
 
-1. **Globus:** Erde mit dem Finger drehen, mit zwei Fingern zoomen, Land antippen oder suchen, Steckbrief lesen (Einwohner, Wirtschaft, Fläche, Schwierigkeit).
-2. **Amtsantritt:** Regierungsform wählen, optional eigenen Namen eingeben.
+1. **Globus:** Erde drehen und zoomen, die Städte der anderen ansehen, Koordinaten eingeben oder auf den Globus tippen.
+2. **Gründung:** Namen und Baustil wählen, „Gründen“ – die Kamera fliegt aus dem All auf die neue Stadt (etwa 5.000 Menschen, Bauernhöfe, ein Solar- oder Windpark, ein Sägewerk).
 3. **Regieren:** Die Zeit läuft in Echtzeit – ein Spielmonat dauert einen echten Tag, auch bei geschlossener App. Schneller geht es mit 1 Monat pro Stunde oder pro 2 Minuten; Pause hält alles an.
 4. **Ereignisse** verlangen Entscheidungen: Dürre, Ölfund, Konzern will Werk bauen, Hochwasser, Rezession, Streik, Einwanderung, Olympia-Bewerbung, Forschungsdurchbruch, Erdbeben, Waldbrand, Handelsabkommen, Klimaproteste.
 5. **Wahl oder Umsturz:**
@@ -95,8 +103,8 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - **Gebäude** in Schrägansicht mit Schatten; jeder Stadtstil hat eigene Farben und Bauformen. Rauch aus Schloten, Dampf aus Kühltürmen.
 - **Datenansichten:** Wohndichte, Zufriedenheit, Verschmutzung, Fruchtbarkeit, Rohstoffe, Verkehrsnetz.
 - Werkzeug-Symbole sind Miniaturen der echten Gebäude auf der Karte.
-- **Eine durchgehende Welt:** Die ganze Erde liegt in einem gemeinsamen Feldraster (Mercator). Gelände, Klima, Wälder, Rohstoffe, Ländergrenzen und die echten Großstädte fremder Länder werden beim Hinsehen berechnet – überall gleich, ohne Nähte. Das eigene Land ist das Fenster in diese Welt, das simuliert und bebaut wird.
-- **Stufenloser Zoom** vom Weltall bis zu einzelnen Häusern: 3D-Globus → flache Weltkarte mit Ländern → Landkarte mit Gelände, Städten und Straßen → Detailansicht (4-fach). Die Stufen blenden ineinander über, die Kamera ist für alle dieselbe. Neue Spiele beginnen mit einem Anflug aus dem All. Man kann frei über die Grenzen hinaus durch die ganze Welt scrollen; „Zu meinem Land“ fliegt zurück.
+- **Eine durchgehende Welt:** Die ganze Erde liegt in einem gemeinsamen Feldraster (Mercator). Gelände, Klima, Wälder und Rohstoffe werden beim Hinsehen berechnet – überall gleich, ohne Nähte und ohne Ländergrenzen. Die eigene Stadt ist das Fenster in diese Welt, das simuliert und bebaut wird.
+- **Stufenloser Zoom** vom Weltall bis zu einzelnen Häusern: 3D-Globus mit den Städten aller Spieler → flache Karte des Umlands → Stadtkarte mit Gelände, Häusern und Straßen → Detailansicht (4-fach). Die Stufen blenden ineinander über, die Kamera ist für alle dieselbe. Neue Spiele beginnen mit einem Anflug aus dem All. Man kann frei durch die ganze Welt scrollen; „Zu meiner Stadt“ fliegt zurück.
 
 ### Grafik
 - **Echte Figuren statt Spielsteine:** Infanterie ist ein Soldat mit Helm, Uniform, Gewehr und Rucksack, der beim Marschieren läuft und im Gefecht anlegt; Panzer mit Ketten, Laufrollen, Turm, Tarnanstrich und Hoheitszeichen; Geschütze mit Rädern, Schild, Lafette und Kanonier. Uniformen tragen realistische Farben (Oliv, Feldgrau, Khaki, Sand …), die Zugehörigkeit zeigt ein Ring am Boden in Landesfarbe. Nah beieinander stehende Truppen weichen auf dem Bildschirm zu einer Formation aus. Neue Einheitentypen tragen sich in `js/sprites.js` ein.
@@ -121,12 +129,14 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 - Zonen und Geländeformung werden mit einem Finger gemalt, verschoben wird dann mit zwei Fingern.
 - Lagebericht, Haushalt und Städte liegen in einem Blatt, das von unten hereinfährt.
 
-## 6. Zeit und Militär
+## 6. Zeit (und der frühere Militärteil)
 
 ### Echtzeit
 - **1 Spielmonat = 1 echter Tag** (ein Spieltag ≈ 48 Minuten, eine Spielstunde = 2 Minuten). Schnellere Stufen: 1 Monat pro Stunde, 1 Monat pro 2 Minuten, oder Pause.
 - Geld fließt laufend (Monatssaldo anteilig pro Sekunde); Wachstum, Ereignisse und Wahlen kommen zum Monatsabschluss.
 - Die Welt läuft weiter, wenn die App geschlossen ist. Beim Öffnen wird bis zu ein Jahr nachgerechnet (Ereignisse werden vorsichtig entschieden) und ein Lagebericht gezeigt.
+
+> Der folgende Militärteil gehört zum früheren Ländermodus. Der Code ist noch vorhanden, im Stadtmodus aber abgeschaltet: keine Kasernen, kein Militär-Tab, keine Wehrgesetze.
 
 ### Truppen
 | Einheit | Kosten | Unterhalt/Monat | Tempo | Stärken |
@@ -170,7 +180,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 
 - Reines HTML/CSS/JavaScript ohne Build-Schritt, läuft offline (Schriften optional von Google Fonts).
 - Kartendaten: Natural Earth 1:50m (gemeinfrei), vereinfacht auf ~430 KB.
-- Die Landeskarte ist ein Raster von 72–192 Feldern pro Seite; die Feldgröße hängt von der Landesgröße ab (Luxemburg ≈ 1 km, Deutschland ≈ 7 km, Russland ≈ 50 km pro Feld). Startstädte belegen nur einen kleinen Teil davon, damit viel Platz zum Gestalten bleibt.
+- Das Stadtgebiet ist ein Raster von 128 × 128 Feldern à 250 m. Die Weltbreite des Feldrasters richtet sich nach der Breite des Gründungsorts, damit ein Feld dort wirklich 250 m misst. Für die Zwischenzoomstufen werden zwei gröbere Geländebilder des Umlands (etwa 1.000 km und 250 km) aus demselben Geländegenerator berechnet.
 - Bei Spielstart wird der Haushalt kalibriert: Nicht simulierte Teile der Wirtschaft erscheinen als „Übrige Wirtschaft“ bzw. „Renten & Altlasten“, damit jedes Land mit einem leichten Plus startet.
 - Speichern im Browser (automatisch jährlich und beim Verlassen der Seite).
 
@@ -178,7 +188,7 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 |---|---|
 | `js/data/world.js` | Ländergrenzen, Einwohner, Wirtschaft, Städte (generiert) |
 | `js/defs.js` | Landschaften, Gebäude, Stadtstile, Regierungsformen |
-| `js/generate.js` | Landeskarte aus echten Grenzen: Höhen, Klima, Flüsse, Wald, Rohstoffe, Startstädte, Straßen |
+| `js/generate.js` | Stadtgebiet an Koordinaten (`generateCity`, Landprüfung `landAt`) und früherer Ländermodus: Höhen, Klima, Flüsse, Wald, Rohstoffe, Startstädte, Straßen |
 | `js/military.js` | Truppen, Gefechte, Eroberung, KI-Gegner, Kriegsfolgen |
 | `js/sim.js` | Monatssimulation: Städte, Wirtschaft, Handel, Haushalt, Zufriedenheit, Ereignisse, Wahlen, Erfolge |
 | `js/render.js` | Karten-Zeichnung mit Zwischenspeicher, Gebäude, Animationen, Datenansichten |
@@ -187,10 +197,12 @@ Die landesweite **Zustimmung** ist der nach Einwohnern gewichtete Durchschnitt.
 | `js/effects.js` | Gefechtseffekte (Leuchtspur, Granaten, Explosionen, Wracks), Frontlinien, Wolken, Abzeichen der Einheiten |
 | `js/territory.js` | Verschobene Grenzen: eroberte und verlorene Gebiete auf Globus und Weltkarte |
 | `js/world.js` | Die ganze Welt als Feldraster: Gelände, Klima, Grenzen, fremde Städte (reine Funktionen globaler Koordinaten) |
-| `js/worldmap.js` | 3D-Globus (Länderwahl und weiteste Zoomstufe im Spiel) |
+| `js/worldmap.js` | 3D-Globus (Ortswahl, Stadtmarken, weiteste Zoomstufe im Spiel) |
+| `js/online.js` | Gemeinsame Welt: Städte aller Spieler lesen, eigene Stadt eintragen |
 | `js/ui.js` | Werkzeuge, Panels, Dialoge, Maus- und Touch-Steuerung |
 | `js/main.js` | Start, Spielschleife, Speichern |
 | `tools/build_data.py` | Erzeugt `world.js` aus Natural-Earth-GeoJSON |
+| `tools/citytest.js` | Stadt an Koordinaten gründen und zwei Jahre simulieren (ohne Browser) |
 | `tools/simtest.js` | Testlauf der Simulation ohne Browser |
 | `tools/build_single.py` | Baut eine einzelne HTML-Datei zum Teilen |
 

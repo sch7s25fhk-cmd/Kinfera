@@ -2,13 +2,13 @@
 'use strict';
 (function (S) {
   const $ = (id) => document.getElementById(id);
-  const SAVE_KEY = 'souveraen.save.v3'; // v3: Länder liegen im gemeinsamen Weltraster
+  const SAVE_KEY = 'souveraen.save.v4'; // v4: eine eigene Stadt an echten Koordinaten
   // Spielmonate pro echter Sekunde: Echtzeit (1 Monat = 1 Tag), schnell (1 Monat = 1 Stunde), Zeitraffer (1 Monat = 2 Minuten)
   const RATE = [0, 1 / 86400, 1 / 3600, 1 / 120];
   const MAX_CATCHUP_MONTHS = 12;
   const FLAGS = ['#c0392b', '#1f6fb2', '#2e8b57', '#d4a017', '#7d3c98', '#d35400', '#16a085', '#b03a2e'];
   S.WORLD = window.WORLD_DATA;
-  let G = null, selected = null, gov = 'demokratie';
+  let G = null, pick = null, style = 'historisch', replaceArmed = false;
 
   // ======================= Speichern =======================
   function serialize(G) {
@@ -48,103 +48,179 @@
     } catch (e) { return null; }
   }
 
-  // ======================= Weltkarte =======================
+  // ======================= Startbildschirm =======================
+  /** Globus in den freien Raum zwischen Kopfzeile und Gründungskarte setzen */
+  function fitGlobe() {
+    const sc = $('screen-world').getBoundingClientRect();
+    if (!sc.height) return;
+    const top = $('worldHead').getBoundingClientRect().bottom - sc.top;
+    const bot = $('foundCard').getBoundingClientRect().top - sc.top;
+    S.WM.area = bot - top > 160 ? [top + 4, bot - 4] : null;
+  }
   function showWorld() {
     $('screen-game').hidden = true;
     $('screen-world').hidden = false;
     S.WM.resize();
+    fitGlobe();
     const info = saveInfo();
     const btn = $('btnContinue');
-    if (info) { btn.hidden = false; btn.textContent = 'Weiterspielen: ' + info.name + ', ' + S.dateStr(info.month); }
+    if (info) { btn.hidden = false; btn.textContent = 'Weiter in ' + info.name + ' · ' + S.dateStr(info.month); }
     else btn.hidden = true;
+    replaceArmed = false;
+    updateFound();
+    updateMarks();
   }
   S.toWorld = function () { G = null; S.UI.G = null; S.R.G = null; showWorld(); };
 
-  function selectCountry(item) {
-    selected = item;
-    S.WM.sel = item;
-    const c = item.c;
-    const I = S.INCOME[c.inc] || S.INCOME[3];
-    const cap = (c.pl || []).find(p => p[4]) || (c.pl || [])[0];
-    $('ccName').textContent = c.n;
-    $('ccCont').textContent = ({ Europe: 'Europa', Asia: 'Asien', Africa: 'Afrika', 'North America': 'Nordamerika', 'South America': 'Südamerika', Oceania: 'Ozeanien', 'Seven seas (open ocean)': 'Inselstaat', Antarctica: 'Antarktis' })[c.cont] || c.cont;
-    $('ccCap').textContent = cap ? 'Hauptstadt: ' + cap[0] : 'Hauptstadt wird neu gegründet';
-    const sel = S.selectRings(c);
-    const km2 = sel.rings.reduce((s, r) => s + r.area, 0) * 111 * 111;
-    $('ccFacts').innerHTML =
-      '<div><dt>Einwohner</dt><dd>' + S.fmtPop(c.pop) + '</dd></div>' +
-      '<div><dt>Wirtschaft</dt><dd>' + (c.gdp ? S.fmt(c.gdp / 1000) + ' Mrd. $' : '–') + '</dd></div>' +
-      '<div><dt>Fläche (Kernland)</dt><dd>' + S.fmtPop(km2) + ' km²</dd></div>' +
-      '<div><dt>Städte zum Start</dt><dd>' + Math.min(8, Math.max(1, (c.pl || []).length)) + '</dd></div>';
-    $('ccDiff').innerHTML = '<b>' + I.name + '.</b> ' + ({
-      Anspruchsvoll: 'Reiche Länder starten mit voller Kasse, aber die Menschen erwarten viel.',
-      Ausgewogen: 'Solide Ausgangslage mit Luft nach oben.',
-      Aufbauspiel: 'Wenig Geld, genügsame Menschen und viel Raum für Aufbau.',
-      'Großes Potenzial': 'Knappe Mittel und niedrige Bildung – aber jede Verbesserung wird gefeiert.'
-    })[I.diff];
-    $('countryCard').hidden = false;
-    requestAnimationFrame(() => S.WM.shapePreview($('ccShape'), item));
+  /** „48.137, 11.575“, „48,137 11,575“, „48°08'13"N 11°34'30"E“, „33.87 S 151.21 O“ -> {lat, lon} */
+  S.parseCoords = function (str) {
+    const s = String(str || '').toUpperCase().replace(/[′’´`]/g, "'").replace(/[″“”]/g, '"').replace(/''/g, '"').trim();
+    if (!s) return null;
+    const vals = [];
+    // Grad, Minuten, Sekunden mit Himmelsrichtung
+    const dms = /([-+]?\d+(?:[.,]\d+)?)\s*°\s*(?:(\d+(?:[.,]\d+)?)\s*'\s*)?(?:(\d+(?:[.,]\d+)?)\s*"\s*)?([NSOEW])?/g;
+    let m;
+    if (s.includes('°')) {
+      while ((m = dms.exec(s)) && vals.length < 2) {
+        const n = (x) => (x ? parseFloat(x.replace(',', '.')) : 0);
+        let v = Math.abs(n(m[1])) + n(m[2]) / 60 + n(m[3]) / 3600;
+        if (m[1].startsWith('-') || m[4] === 'S' || m[4] === 'W') v = -v;
+        vals.push({ v, h: m[4] || '' });
+      }
+    } else {
+      const dec = /([-+]?\d+(?:[.,]\d+)?)\s*([NSOEW])?/g;
+      while ((m = dec.exec(s)) && vals.length < 2) {
+        let v = parseFloat(m[1].replace(',', '.'));
+        if (m[2] === 'S' || m[2] === 'W') v = -Math.abs(v);
+        vals.push({ v, h: m[2] || '' });
+      }
+    }
+    if (vals.length < 2) return null;
+    let [a, b] = vals;
+    // „11.5 O 48.1 N“: Reihenfolge nach Himmelsrichtung tauschen
+    if ('OEW'.includes(a.h) && a.h && 'NS'.includes(b.h) && b.h) [a, b] = [b, a];
+    const lat = a.v, lon = b.v;
+    if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon };
+  };
+  S.fmtCoords = function (lat, lon) {
+    const f = (v) => Math.abs(v).toFixed(4).replace('.', ',');
+    return f(lat) + '° ' + (lat >= 0 ? 'N' : 'S') + ' · ' + f(lon) + '° ' + (lon >= 0 ? 'O' : 'W');
+  };
+
+  function setMsg(text, kind) { const el = $('coordMsg'); el.textContent = text; el.className = 'coord-msg' + (kind ? ' ' + kind : ''); }
+
+  function choose(lat, lon, fly) {
+    replaceArmed = false;
+    if (Math.abs(lat) > 80) { pick = null; setMsg('So nah an den Polen kann keine Stadt stehen (höchstens 80° Breite).', 'bad'); updateFound(); updateMarks(); return; }
+    pick = { lat, lon, ok: S.landAt(lon, lat) };
+    if (!pick.ok) setMsg(S.fmtCoords(lat, lon) + ' – hier ist Wasser. Wähle einen Ort an Land.', 'bad');
+    else {
+      const near = S.Online.near(lat, lon, 1.5);
+      if (near.length) { pick.ok = false; setMsg('Hier steht schon ' + near[0].c.name + '. Wähle einen Ort etwas weiter weg.', 'bad'); }
+      else {
+        const close = S.Online.near(lat, lon, 40);
+        setMsg(S.fmtCoords(lat, lon) + (close.length ? ' · Nachbarstadt: ' + close[0].c.name + ' (' + Math.round(close[0].d) + ' km)' : ' · Bauland ✓'), 'ok');
+      }
+    }
+    if (fly) S.WM.flyTo(lon, lat, Math.max(S.WM.zoom, 7), 1400);
+    updateFound(); updateMarks();
   }
 
-  function buildSetup() {
-    const box = $('govChoices');
-    box.innerHTML = Object.entries(S.GOVS).map(([k, g]) => '<button class="opt" data-gov="' + k + '" aria-pressed="' + (k === gov) + '"><span><b>' + g.name + '</b><small>' + g.desc + '</small></span></button>').join('');
-    box.querySelectorAll('[data-gov]').forEach(b => b.addEventListener('click', () => {
-      gov = b.dataset.gov;
-      box.querySelectorAll('[data-gov]').forEach(o => o.setAttribute('aria-pressed', o === b));
-    }));
+  function updateFound() {
+    const name = $('cityName').value.trim();
+    const btn = $('btnFound');
+    btn.disabled = !(pick && pick.ok && name);
+    if (!replaceArmed) btn.textContent = !pick ? 'Erst einen Ort wählen' : !pick.ok ? 'Hier geht es nicht' : !name ? 'Gib deiner Stadt einen Namen' : name + ' gründen';
+  }
+
+  function updateMarks() {
+    const marks = S.Online.cities.map(c => ({ lon: c.lon, lat: c.lat, label: S.Online.label(c), kind: c.id === S.Online.me ? 'own' : 'other' }));
+    if (pick) marks.push({ lon: pick.lon, lat: pick.lat, label: $('cityName').value.trim() || '', kind: 'pick' });
+    S.WM.marks = marks;
+    // die eigene Stadt und die der anderen auch im Spiel auf dem Globus zeigen
+    if (S.R.globe) S.R.globe.marks = S.Online.cities.map(c => ({ lon: c.lon, lat: c.lat, label: S.Online.label(c), kind: c.id === S.Online.me ? 'own' : 'other' }));
+    const n = S.Online.cities.length, wb = $('btnWorldList');
+    wb.hidden = !n;
+    wb.textContent = n === 1 ? '1 Stadt in der Welt' : n + ' Städte in der Welt';
+    const list = $('worldList');
+    if (!list.hidden) renderWorldList();
+  }
+
+  function renderWorldList() {
+    const list = $('worldList');
+    const cs = S.Online.cities.slice().sort((a, b) => b.pop - a.pop);
+    list.innerHTML = '';
+    for (const c of cs) {
+      const li = document.createElement('li');
+      if (c.id === S.Online.me) li.className = 'me';
+      const b = document.createElement('b'); b.textContent = S.Online.label(c);
+      const sp = document.createElement('span'); sp.textContent = S.fmtPop(c.pop) + ' Einw.';
+      li.append(b, sp);
+      li.addEventListener('click', () => { list.hidden = true; S.WM.flyTo(c.lon, c.lat, Math.max(S.WM.zoom, 6), 1400); });
+      list.appendChild(li);
+    }
+  }
+
+  function buildStyles() {
+    const box = $('styleChoices');
+    box.innerHTML = '';
+    for (const k of S.STYLE_KEYS) {
+      const b = document.createElement('button');
+      b.textContent = S.STYLES[k].short; b.title = S.STYLES[k].desc;
+      b.setAttribute('aria-pressed', k === style);
+      b.addEventListener('click', () => { style = k; box.querySelectorAll('button').forEach(o => o.setAttribute('aria-pressed', o === b)); });
+      box.appendChild(b);
+    }
   }
 
   function bindWorldUI() {
-    const input = $('countrySearch'), list = $('searchList');
-    let hits = [], on = 0;
-    const render = () => {
-      list.innerHTML = hits.map((it, i) => '<li data-i="' + i + '" class="' + (i === on ? 'on' : '') + '">' + S.esc(it.c.n) + '<span>' + S.fmtPop(it.c.pop) + '</span></li>').join('');
-      list.hidden = !hits.length;
+    buildStyles();
+    const input = $('coordInput');
+    const show = () => {
+      const c = S.parseCoords(input.value);
+      if (!c) { setMsg('Das verstehe ich nicht. Beispiel: 48.137, 11.575 oder 48°08\'N 11°34\'O', 'bad'); return; }
+      choose(c.lat, c.lon, true);
     };
-    const pick = (it) => { input.value = it.c.n; list.hidden = true; S.WM.focus(it); selectCountry(it); };
-    input.addEventListener('input', () => {
-      const q = input.value.trim().toLowerCase();
-      hits = q ? S.WM.items.filter(it => it.c.n.toLowerCase().includes(q) || it.c.en.toLowerCase().includes(q))
-        .sort((a, b) => (a.c.n.toLowerCase().startsWith(q) ? 0 : 1) - (b.c.n.toLowerCase().startsWith(q) ? 0 : 1) || b.c.pop - a.c.pop).slice(0, 8) : [];
-      on = 0; render();
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') { on = Math.min(hits.length - 1, on + 1); render(); e.preventDefault(); }
-      else if (e.key === 'ArrowUp') { on = Math.max(0, on - 1); render(); e.preventDefault(); }
-      else if (e.key === 'Enter' && hits[on]) pick(hits[on]);
-      else if (e.key === 'Escape') list.hidden = true;
-    });
-    list.addEventListener('pointerdown', (e) => { const li = e.target.closest('li'); if (li) { e.preventDefault(); pick(hits[+li.dataset.i]); } });
-    input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
-    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { $(b.dataset.close).hidden = true; if (b.dataset.close === 'countryCard') S.WM.sel = null; }));
-    $('btnRule').addEventListener('click', () => { buildSetup(); $('setup').hidden = false; });
-    $('btnStart').addEventListener('click', () => startNew());
+    $('btnCoordShow').addEventListener('click', show);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); show(); input.blur(); } });
+    S.WM.onTap = (lon, lat) => {
+      input.value = lat.toFixed(5) + ', ' + lon.toFixed(5);
+      choose(lat, lon, false);
+    };
+    $('cityName').addEventListener('input', () => { replaceArmed = false; updateFound(); updateMarks(); });
+    $('btnFound').addEventListener('click', () => foundCity());
     $('btnContinue').addEventListener('click', () => { const g = loadSave(); if (g) enterGame(g, false); });
+    $('btnWorldList').addEventListener('click', () => { const l = $('worldList'); l.hidden = !l.hidden; if (!l.hidden) renderWorldList(); });
+    S.Online.onChange(() => updateMarks());
   }
 
   // ======================= Spiel starten =======================
-  function startNew() {
-    if (!selected) return;
-    const btn = $('btnStart');
+  function foundCity() {
+    const name = $('cityName').value.trim();
+    if (!pick || !pick.ok || !name) return;
+    const info = saveInfo();
+    const btn = $('btnFound');
+    if (info && !replaceArmed) {
+      replaceArmed = true;
+      btn.textContent = 'Nochmal tippen: ' + info.name + ' wird ersetzt';
+      return;
+    }
+    replaceArmed = false;
     btn.disabled = true;
     btn.textContent = 'Land wird vermessen …';
     setTimeout(() => {
       try {
-        const g = S.generateCountry(selected.c, { gov, ruler: $('rulerName').value.trim() });
-        S.Mil.init(g);
+        const g = S.generateCity({ lat: pick.lat, lon: pick.lon, name, style });
         S.calibrate(g);
         g.continuous = true; g.frac = 0;
-        $('setup').hidden = true;
-        $('countryCard').hidden = true;
         enterGame(g, true);
+        S.Online.publish(g, true);
       } catch (e) {
         console.error(e);
-        btn.textContent = 'Dieses Land ist zu klein für eine Karte';
-        setTimeout(() => { btn.textContent = 'Amt übernehmen'; }, 2500);
+        setMsg(/Land/.test(e.message) ? 'Hier ist zu wenig Land für eine Stadt. Wähle einen Ort weiter im Landesinneren.' : 'Die Stadt konnte nicht gegründet werden.', 'bad');
       } finally {
-        btn.disabled = false;
-        if (btn.textContent === 'Land wird vermessen …') btn.textContent = 'Amt übernehmen';
+        updateFound();
       }
     }, 30);
   }
@@ -162,13 +238,14 @@
     S.onGridGrown = (dx, dy) => { if (S.R.G === G) { S.R.gridGrown(dx, dy); S.UI.gridGrown(dx, dy); } };
     S.onAnnex = () => { if (S.R.G === G) S.R.annexed(); };
     S.World.setup(G.world);
-    if (!G.mil) S.Mil.init(G);
+    if (!G.mil && G.mode !== 'city') S.Mil.init(G);
     G.continuous = true;
     S.UI.RATE = RATE;
     const away = fresh ? null : catchUp(G);
-    if (!fresh) S.Mil.ensureGrid(G);
+    if (!fresh && G.mil) S.Mil.ensureGrid(G);
     requestAnimationFrame(() => {
       S.R.init(G, $('mapCanvas'));
+      updateMarks();
       S.UI.initGame(G);
       if (!fresh && G.savedSpeed !== undefined) S.UI.setSpeed(G.savedSpeed);
       if (away) S.UI.openAwayReport(G, away);
@@ -190,7 +267,7 @@
   function advance(G, dM, onTick) {
     G.frac = (G.frac || 0) + dM;
     if (G.eco.last) G.eco.money += G.eco.last.net * dM;
-    S.Mil.advance(G, dM * 720);
+    if (G.mil) S.Mil.advance(G, dM * 720);
     // Städte wachsen jeden Spieltag ein Stück
     G.dayAcc = (G.dayAcc || 0) + dM;
     while (G.dayAcc >= 1 / 30) { G.dayAcc -= 1 / 30; S.growCities(G, 1 / 30); }
@@ -198,6 +275,7 @@
       G.frac -= 1;
       S.tick(G);
       if (onTick) onTick();
+      if (G.mode === 'city') S.Online.publish(G);
       if (G.pendingEvent) break;
     }
   }
@@ -244,7 +322,7 @@
       if (acc > 1500) {
         acc = 0;
         // erobertes Land bebaubar machen, sobald gerade niemand die Karte bewegt
-        if (G._growReq && !G.pendingEvent && !S.UI.modalOpen && !S.UI.busy()) {
+        if (G._growReq && G.mil && !G.pendingEvent && !S.UI.modalOpen && !S.UI.busy()) {
           if (S.Mil.ensureGrid(G) && !G.flags.grewHint) { G.flags.grewHint = true; S.UI.toast('Erobertes Land gehört jetzt zu deinem Staatsgebiet: Du kannst dort bauen und Städte gründen.', 'good', 5200); }
         }
         S.UI.refresh(false);
@@ -261,12 +339,12 @@
   }
 
   function boot() {
-    S.WM.init($('worldCanvas'), selectCountry);
+    S.WM.init($('worldCanvas'), () => {});
     bindWorldUI();
     $('gZoomIn').addEventListener('click', () => S.WM.zoomBy(1.6));
     $('gZoomOut').addEventListener('click', () => S.WM.zoomBy(1 / 1.6));
     window.addEventListener('resize', () => {
-      S.WM.resize();
+      S.WM.resize(); fitGlobe();
       if (G && S.R.G === G) { S.R.resize(); S.R.clampCam(); }
     });
     document.addEventListener('visibilitychange', () => { if (document.hidden && G) S.save(G); });
@@ -278,6 +356,7 @@
       requestAnimationFrame(loop);
     };
     if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+    S.Online.init();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
